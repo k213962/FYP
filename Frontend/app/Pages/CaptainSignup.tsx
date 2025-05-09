@@ -11,11 +11,24 @@ import {
 } from "react-native";
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from "expo-router";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { UserDataContext } from "../context/userContext";
 
+interface UserData {
+  token: string;
+  [key: string]: any;
+}
+
+interface UserContextType {
+  setUser: (user: UserData) => void;
+}
+
+interface ErrorResponse {
+  message: string;
+}
+
 const CaptainSignup = () => {
-  const { setUser } = useContext(UserDataContext);
+  const { setUser } = useContext(UserDataContext) as UserContextType;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -24,15 +37,49 @@ const CaptainSignup = () => {
   const [mobile, setMobile] = useState("");
   const [driverLicense, setDriverLicense] = useState("");
   const [vehiclePlateNo, setVehiclePlateNo] = useState("");
-  const [vehicleType, setVehicleType] = useState(""); // Default empty for placeholder
+  const [vehicleType, setVehicleType] = useState("");
   const router = useRouter();
 
+  const validateForm = () => {
+    // Name validation
+    if (firstName.length < 2) return "First name must be at least 2 characters!";
+    if (lastName.length < 2) return "Last name must be at least 2 characters!";
+
+    // Email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Invalid email format!";
+
+    // Password validation
+    if (password.length < 6) return "Password must be at least 6 characters!";
+    if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter!";
+    if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter!";
+    if (!/[0-9]/.test(password)) return "Password must contain at least one number!";
+
+    // CNIC validation
+    if (!/^[0-9]{13}$/.test(cnic)) return "CNIC must be exactly 13 digits!";
+
+    // Mobile validation
+    if (!/^[0-9]{10,15}$/.test(mobile)) return "Mobile number must be 10-15 digits!";
+    if (!mobile.startsWith('03')) return "Mobile number must start with '03'!";
+
+    // Driver License validation
+    if (driverLicense.length < 5) return "Driver license must be at least 5 characters!";
+
+    // Vehicle Plate No validation
+    if (vehiclePlateNo.length < 5) return "Vehicle plate number must be at least 5 characters!";
+
+    // Vehicle Type validation
+    if (!vehicleType) return "Please select a vehicle type!";
+
+    return null;
+  };
+
   const handleSignup = async () => {
-    if (!firstName || !lastName || !email || !password || !cnic || !mobile || !driverLicense || !vehiclePlateNo || !vehicleType) {
-      Alert.alert("Error", "All fields are required.");
+    const errorMessage = validateForm();
+    if (errorMessage) {
+      Alert.alert("Error", errorMessage);
       return;
     }
-  
+
     try {
       console.log("Sending signup request to:", `${process.env.EXPO_PUBLIC_BASE_URL}/captain/register`);
       console.log("Request Payload:", {
@@ -45,7 +92,7 @@ const CaptainSignup = () => {
         vehiclePlateNo,
         vehicleType,
       });
-  
+
       const response = await axios.post(
         `${process.env.EXPO_PUBLIC_BASE_URL}/captain/register`,
         {
@@ -59,9 +106,9 @@ const CaptainSignup = () => {
           vehicleType,
         }
       );
-  
+
       console.log("Response:", response.data);
-  
+
       if (response.status === 201) {
         const { user, token } = response.data;
         setUser({ ...user, token });
@@ -71,11 +118,11 @@ const CaptainSignup = () => {
       }
     } catch (error) {
       console.error("Signup failed:", error);
-      console.error("Error Response:", error.response?.data || error.message);
-      Alert.alert("Registration Failed", error.response?.data?.message || "An unexpected error occurred.");
+      const axiosError = error as AxiosError<ErrorResponse>;
+      console.error("Error Response:", axiosError.response?.data || axiosError.message);
+      Alert.alert("Registration Failed", axiosError.response?.data?.message || "An unexpected error occurred.");
     }
   };
-  
 
   const resetForm = () => {
     setFirstName("");
@@ -86,7 +133,7 @@ const CaptainSignup = () => {
     setMobile("");
     setDriverLicense("");
     setVehiclePlateNo("");
-    setVehicleType(""); // Reset to default empty
+    setVehicleType("");
   };
 
   return (
@@ -99,12 +146,14 @@ const CaptainSignup = () => {
           placeholder="First Name"
           value={firstName}
           onChangeText={setFirstName}
+          maxLength={30}
         />
         <TextInput
           style={styles.input}
           placeholder="Last Name"
           value={lastName}
           onChangeText={setLastName}
+          maxLength={30}
         />
       </View>
 
@@ -115,6 +164,7 @@ const CaptainSignup = () => {
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
+        autoCapitalize="none"
       />
 
       <Text style={styles.label}>Password</Text>
@@ -133,6 +183,7 @@ const CaptainSignup = () => {
         keyboardType="numeric"
         value={cnic}
         onChangeText={setCnic}
+        maxLength={13}
       />
 
       <Text style={styles.label}>Mobile Number</Text>
@@ -142,6 +193,7 @@ const CaptainSignup = () => {
         keyboardType="phone-pad"
         value={mobile}
         onChangeText={setMobile}
+        maxLength={11}
       />
 
       <Text style={styles.label}>Driver License</Text>
@@ -150,6 +202,7 @@ const CaptainSignup = () => {
         placeholder="Enter Driver License"
         value={driverLicense}
         onChangeText={setDriverLicense}
+        maxLength={20}
       />
 
       <Text style={styles.label}>Vehicle Plate No</Text>
@@ -158,6 +211,7 @@ const CaptainSignup = () => {
         placeholder="Enter Vehicle Plate No"
         value={vehiclePlateNo}
         onChangeText={setVehiclePlateNo}
+        maxLength={20}
       />
 
       <Text style={styles.label}>Vehicle Type</Text>

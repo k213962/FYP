@@ -8,15 +8,22 @@ import {
   Dimensions,
   Animated,
 } from 'react-native';
-
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 import CaptainInfoCard from '../../Components/captainInfoCard';
-import RidePopup from '../../Components/RidePopup'; // Static now
+import RidePopup from '../../Components/RidePopup';
 import { useRouter } from 'expo-router';
 
 const Home = () => {
   const router = useRouter();
   const [status, setStatus] = useState('Online');
   const [showRidePopup, setShowRidePopup] = useState(true);
+  const [currentLocation, setCurrentLocation] = useState({
+    latitude: 24.8607,
+    longitude: 67.0011,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  });
 
   const popupAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
@@ -28,12 +35,26 @@ const Home = () => {
     }).start();
   }, [showRidePopup]);
 
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Permission to access location was denied');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      setCurrentLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      });
+    })();
+  }, []);
+
   const toggleStatus = () => {
     setStatus((prev) => (prev === 'Online' ? 'Offline' : 'Online'));
-  };
-
-  const closePopup = () => {
-    setShowRidePopup(false);
   };
 
   return (
@@ -57,13 +78,14 @@ const Home = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Hero Section */}
-      <View style={styles.imageSection}>
-        <Image
-          style={styles.heroImage}
-          source={{
-            uri: 'https://miro.medium.com/v2/resize:fit:1400/0*gwMx05pqII5hbfmX.gif',
-          }}
+      {/* Map Section */}
+      <View style={styles.mapContainer}>
+        <MapView
+          provider={PROVIDER_GOOGLE}
+          style={styles.map}
+          region={currentLocation}
+          showsUserLocation={true}
+          showsMyLocationButton={true}
         />
       </View>
 
@@ -126,13 +148,12 @@ const styles = StyleSheet.create({
     height: 24,
     resizeMode: 'contain',
   },
-  imageSection: {
+  mapContainer: {
     flex: 3,
     marginTop: 80,
   },
-  heroImage: {
+  map: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
 });

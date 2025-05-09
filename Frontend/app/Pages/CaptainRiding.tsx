@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,34 +8,62 @@ import {
   Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 
 const { height } = Dimensions.get("window");
 
 const CaptainRiding = () => {
   const router = useRouter();
+  const [currentLocation, setCurrentLocation] = useState({
+    latitude: 24.8607,
+    longitude: 67.0011,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  });
+
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Permission to access location was denied');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      setCurrentLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      });
+    })();
+  }, []);
 
   return (
     <View style={styles.container}>
-      {/* Map Background */}
-      <Image
-        style={styles.heroImage}
-        source={{
-          uri: 'https://miro.medium.com/v2/resize:fit:1400/0*gwMx05pqII5hbfmX.gif',
-        }}
-      />
+      {/* Map Section */}
+      <View style={styles.mapContainer}>
+        <MapView
+          provider={PROVIDER_GOOGLE}
+          style={styles.map}
+          region={currentLocation}
+          showsUserLocation={true}
+          showsMyLocationButton={true}
+        />
+      </View>
 
       {/* Uber Header */}
       <View style={styles.header}>
-        
         <TouchableOpacity
-                  style={styles.logoutBtn}
-                  onPress={() => router.push('./CaptainHome')}
-                >
-                  <Image
-                    source={require('../../assets/images/logoutcaptain.png')}
-                    style={styles.logoutImage}
-                  />
-                </TouchableOpacity>
+          style={styles.logoutBtn}
+          onPress={() => router.push('./CaptainHome')}
+        >
+          <Image
+            source={require('../../assets/images/logoutcaptain.png')}
+            style={styles.logoutImage}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Emergency Bottom Panel */}
@@ -53,20 +81,21 @@ const CaptainRiding = () => {
 };
 
 export default CaptainRiding;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
   },
-  heroImage: {
-  width: "100%",
-  height: "100%",
-  resizeMode: "cover", // this removes black bars and zooms in to fill
-  position: "absolute",
-  top: 0,
-  left: 0,
-},
-
+  mapContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  map: {
+    width: '100%',
+    height: '100%',
+  },
   header: {
     position: "absolute",
     top: 50,
@@ -87,7 +116,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#eee",
     padding: 10,
     borderRadius: 20,
-  },logoutBtn: {
+  },
+  logoutBtn: {
     height: 40,
     width: 40,
     backgroundColor: 'white',
@@ -117,25 +147,25 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 5,
   },
-   kmText: {
+  kmText: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "red", // make the KM text red
+    color: "red",
     marginBottom: 10,
     textAlign: "center",
   },
- completeBtn: {
-  backgroundColor: "red",
-  paddingVertical: 12,
-  paddingHorizontal: 30,
-  borderRadius: 12,
-  width: "100%", // full width button
-  justifyContent: "center", // centers the text vertically
-  alignItems: "center", // centers the text horizontally
-},
-completeBtnText: {
-  color: "#fff",
-  fontWeight: "bold",
-  fontSize: 16,
-},
+  completeBtn: {
+    backgroundColor: "red",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 12,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  completeBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
 });

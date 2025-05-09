@@ -100,7 +100,7 @@ const Home = () => {
       const response = await axios.post(
         `${baseUrl}/rides/create`,
         {
-          destination: "karimabad colony fb area",
+          destination: location,
           vehicleType: vehicle,
         },
         {
