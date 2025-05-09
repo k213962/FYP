@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import axios from "axios";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function CaptainLogin() {
   const [email, setEmail] = useState("");
@@ -23,14 +24,22 @@ export default function CaptainLogin() {
     }
 
     try {
-      const response = await axios.post(`${process.env.EXPO_PUBLIC_BASE_URL}/captain/login`,
+      const response = await axios.post(
+        `${process.env.EXPO_PUBLIC_BASE_URL}/captain/login`,
         { email, password }
       );
+
       if (response.status === 200) {
+        const { token } = response.data;
+        
+        // Save token to AsyncStorage
+        await AsyncStorage.setItem("token", token);
+        
         Alert.alert("Success", "Login successful!");
         router.push("./CaptainHome");
       }
     } catch (error) {
+      console.error("Login error:", error);
       Alert.alert(
         "Login Failed",
         error.response?.data?.message || "Invalid credentials"

@@ -25,6 +25,12 @@ router.post('/login', CaptainController.loginCaptain);
 router.post('/logout', auth, CaptainController.logoutCaptain);
 
 // GET PROFILE
-router.get('/profile', auth, CaptainController.getCaptainProfile);
+router.get('/profile', auth, CaptainController.getProfile);
+
+// Update Captain Status
+router.patch('/status', auth, CaptainController.updateStatus);
+
+// Update Captain Stats
+router.patch('/stats', auth, CaptainController.updateStats);
 
 module.exports = router;

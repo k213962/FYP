@@ -98,3 +98,64 @@ exports.getCaptainProfile = async (req, res) => {
         res.status(500).json({ message: "Server Error", error: err.message });
     }
 };
+
+// Get Captain Profile
+exports.getProfile = async (req, res) => {
+    try {
+        const captain = await Captain.findById(req.user.id).select('-password');
+        if (!captain) {
+            return res.status(404).json({ message: "Captain not found" });
+        }
+        res.status(200).json(captain);
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
+
+// Update Captain Status
+exports.updateStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!['Online', 'Offline'].includes(status)) {
+            return res.status(400).json({ message: "Invalid status" });
+        }
+
+        const captain = await Captain.findByIdAndUpdate(
+            req.user.id,
+            { status },
+            { new: true }
+        ).select('-password');
+
+        if (!captain) {
+            return res.status(404).json({ message: "Captain not found" });
+        }
+
+        res.status(200).json(captain);
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
+
+// Update Captain Stats
+exports.updateStats = async (req, res) => {
+    try {
+        const { hoursOnline } = req.body;
+        const updateData = {};
+
+        if (hoursOnline !== undefined) updateData.hoursOnline = hoursOnline;
+
+        const captain = await Captain.findByIdAndUpdate(
+            req.user.id,
+            updateData,
+            { new: true }
+        ).select('-password');
+
+        if (!captain) {
+            return res.status(404).json({ message: "Captain not found" });
+        }
+
+        res.status(200).json(captain);
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};

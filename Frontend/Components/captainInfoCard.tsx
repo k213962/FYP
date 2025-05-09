@@ -1,7 +1,92 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { getLoggedInCaptain } from '../app/utils/captainUtils';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const CaptainInfoCard = ({ status, toggleStatus }) => {
+interface CaptainInfoCardProps {
+  status: string;
+  toggleStatus: () => void;
+}
+
+interface CaptainData {
+  fullname: {
+    firstname: string;
+    lastname: string;
+  };
+  vehiclePlateNo: string;
+  vehicleType: string;
+  hoursOnline?: number;
+  status?: string;
+}
+
+const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
+  const [captainData, setCaptainData] = useState<CaptainData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchCaptainData = async () => {
+    try {
+      const data = await getLoggedInCaptain();
+      console.log('Fetched captain data:', data);
+      if (data) {
+        const formattedData = {
+          ...data,
+          status: data.status || 'Offline'
+        };
+        console.log('Formatted captain data:', formattedData);
+        setCaptainData(formattedData);
+      }
+    } catch (error) {
+      console.error('Error fetching captain data:', error);
+      Alert.alert('Error', 'Failed to fetch captain data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStatusToggle = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Error', 'No authentication token found');
+        return;
+      }
+
+      const newStatus = status === 'Online' ? 'Offline' : 'Online';
+      const response = await axios.patch(
+        `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`,
+        { status: newStatus },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.status === 200) {
+        toggleStatus();
+        fetchCaptainData();
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      Alert.alert('Error', 'Failed to update status');
+    }
+  };
+
+  useEffect(() => {
+    fetchCaptainData();
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.detailsCard}>
+        <Text>Loading captain information...</Text>
+      </View>
+    );
+  }
+
+  console.log('Rendering with captain data:', captainData);
+
   return (
     <View style={styles.detailsCard}>
       <View style={styles.rowBetween}>
@@ -12,21 +97,23 @@ const CaptainInfoCard = ({ status, toggleStatus }) => {
               uri: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?fm=jpg&q=60&w=3000',
             }}
           />
-          <Text style={styles.name}>Captain 1</Text>
+          <Text style={styles.name}>
+            {captainData ? `${captainData.fullname.firstname} ${captainData.fullname.lastname}` : 'Captain'}
+          </Text>
         </View>
         <View style={styles.earnings}>
-          <Text style={styles.earningsText}>Ambulance</Text>
+          <Text style={styles.earningsText}>{captainData?.vehicleType || 'Vehicle'}</Text>
           <Text style={styles.label}>Vehicle Type</Text>
         </View>
       </View>
 
       <View style={styles.rowBetween}>
         <View>
-          <Text style={styles.statValue}>AB-1234</Text>
+          <Text style={styles.statValue}>{captainData?.vehiclePlateNo || 'N/A'}</Text>
           <Text style={styles.label}>Plate Number</Text>
         </View>
         <View>
-          <Text style={styles.statValue}>10.3</Text>
+          <Text style={styles.statValue}>{captainData?.hoursOnline || '0'}</Text>
           <Text style={styles.label}>Hours Online</Text>
         </View>
       </View>
@@ -38,24 +125,11 @@ const CaptainInfoCard = ({ status, toggleStatus }) => {
           </Text>
           <Text style={styles.label}>Responder Status</Text>
         </View>
-        <TouchableOpacity style={styles.statusBtn} onPress={toggleStatus}>
+        <TouchableOpacity style={styles.statusBtn} onPress={handleStatusToggle}>
           <Text style={styles.statusBtnText}>
             {status === 'Online' ? 'Go Offline' : 'Go Online'}
           </Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={[styles.statsRow, { marginTop: 24 }]}>
-        <View style={styles.statBox}>
-          <Text style={styles.statIcon}>🕒</Text>
-          <Text style={styles.statValue}>3</Text>
-          <Text style={styles.label}>Active Calls</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statIcon}>⚡</Text>
-          <Text style={styles.statValue}>24</Text>
-          <Text style={styles.label}>Total Responses</Text>
-        </View>
       </View>
     </View>
   );
@@ -121,16 +195,5 @@ const styles = StyleSheet.create({
   statusBtnText: {
     color: 'white',
     fontWeight: '600',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statBox: {
-    alignItems: 'center',
-  },
-  statIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
+  }
 });

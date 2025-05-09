@@ -9,9 +9,21 @@ const captainSchema = new mongoose.Schema({
     password: { type: String, required: true },
     cnic: { type: String, required: true, unique: true },
     mobile: { type: String, required: true, unique: true },
-    driverLicense: { type: String, required: true },
-    vehiclePlateNo: { type: String, required: true },
-    vehicleType: { type: String, required: true, enum: ['Ambulance', 'Police', 'Fire Brigade'] }
+    driverLicense: { type: String, required: true, unique: true },
+    vehicle: {
+        plate: { type: String, required: true, unique: true },
+        type: { 
+            type: String, 
+            required: true,
+            enum: ['ambulance', 'fire-brigade', 'police']
+        }
+    },
+    hoursOnline: { type: Number, default: 0 },
+    status: { 
+        type: String, 
+        enum: ['Online', 'Offline'],
+        default: 'Offline'
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Captain', captainSchema);
