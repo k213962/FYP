@@ -117,6 +117,10 @@ exports.loginCaptain = async (req, res) => {
         const isMatch = await bcrypt.compare(password, captain.password);
         if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
 
+        // Set status to Offline on login
+        captain.status = 'Offline';
+        await captain.save();
+
         const token = jwt.sign({ id: captain._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
         res.json({ token });
@@ -132,6 +136,13 @@ exports.logoutCaptain = async (req, res) => {
     try {
         const token = req.header("Authorization").split(" ")[1];
         await BlacklistToken.create({ token });
+
+        // Set status to Offline on logout
+        const captain = await Captain.findById(req.user.id);
+        if (captain) {
+            captain.status = 'Offline';
+            await captain.save();
+        }
 
         res.json({ message: "Logged out successfully" });
 

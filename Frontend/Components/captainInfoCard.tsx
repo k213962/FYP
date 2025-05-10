@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, AppState } from 'react-native';
 import { getLoggedInCaptain } from '../app/utils/captainUtils';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,23 +20,41 @@ interface CaptainData {
   status?: string;
 }
 
-const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
+const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardProps) => {
   const [captainData, setCaptainData] = useState<CaptainData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentStatus, setCurrentStatus] = useState('Offline');
+
+  const setCaptainOffline = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      await axios.patch(
+        `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`,
+        { status: 'Offline' },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      setCurrentStatus('Offline');
+    } catch (error) {
+      console.error('Error setting captain offline:', error);
+    }
+  };
 
   const fetchCaptainData = async () => {
     try {
       const data = await getLoggedInCaptain();
-      console.log('Fetched captain data in component:', data);
       if (data) {
         const formattedData = {
           ...data,
           status: data.status || 'Offline'
         };
-        console.log('Formatted captain data in component:', formattedData);
         setCaptainData(formattedData);
-      } else {
-        console.log('No captain data received');
+        setCurrentStatus(formattedData.status || 'Offline');
       }
     } catch (error) {
       console.error('Error fetching captain data:', error);
@@ -54,7 +72,7 @@ const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
         return;
       }
 
-      const newStatus = status === 'Online' ? 'Offline' : 'Online';
+      const newStatus = currentStatus === 'Online' ? 'Offline' : 'Online';
       const response = await axios.patch(
         `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`,
         { status: newStatus },
@@ -66,6 +84,7 @@ const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
       );
 
       if (response.status === 200) {
+        setCurrentStatus(newStatus);
         toggleStatus();
         fetchCaptainData();
       }
@@ -77,6 +96,18 @@ const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
 
   useEffect(() => {
     fetchCaptainData();
+
+    // Handle app state changes
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        setCaptainOffline();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      setCaptainOffline();
+    };
   }, []);
 
   if (loading) {
@@ -122,14 +153,14 @@ const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
 
       <View style={[styles.rowBetween, { marginTop: 20 }]}>
         <View>
-          <Text style={[styles.statusText, { color: status === 'Online' ? 'green' : 'red' }]}>
-            {status}
+          <Text style={[styles.statusText, { color: currentStatus === 'Online' ? 'green' : 'red' }]}>
+            {currentStatus}
           </Text>
           <Text style={styles.label}>Responder Status</Text>
         </View>
         <TouchableOpacity style={styles.statusBtn} onPress={handleStatusToggle}>
           <Text style={styles.statusBtnText}>
-            {status === 'Online' ? 'Go Offline' : 'Go Online'}
+            {currentStatus === 'Online' ? 'Go Offline' : 'Go Online'}
           </Text>
         </TouchableOpacity>
       </View>
