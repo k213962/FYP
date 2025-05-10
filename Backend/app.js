@@ -2,8 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const connectToDb = require("./db/db");
-const userRoute = require("./routers/user.route");
+const userRoute = require("./routes/user.routes");
 const mapRoute = require("./routes/map.routes");
+const captainRoute = require("./routes/captain.routes");
+const rideRoute = require("./routes/ride.routes");
 const app = express();
 
 
@@ -20,4 +22,6 @@ app.use("/test", (req, res) => {
 });
 app.use("/users", userRoute);
 app.use("/map", mapRoute);
+app.use("/captain", captainRoute);
+app.use("/rides", rideRoute);
 module.exports = app;

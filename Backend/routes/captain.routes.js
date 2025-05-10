@@ -33,4 +33,4 @@ router.patch('/status', auth, CaptainController.updateStatus);
 // Update Captain Stats
 router.patch('/stats', auth, CaptainController.updateStats);
 
-module.exports = router;
+module.exports = router; 

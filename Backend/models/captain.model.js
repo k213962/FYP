@@ -5,12 +5,12 @@ const captainSchema = new mongoose.Schema({
         firstname: { type: String, required: true },
         lastname: { type: String, required: true }
     },
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true },
     password: { type: String, required: true },
-    cnic: { type: String, required: true, unique: true },
-    phone: { type: String, required: true, unique: true },
-    driverLicense: { type: String, required: true, unique: true },
-    vehicleNoPlate: { type: String, required: true, unique: true },
+    cnic: { type: String, required: true },
+    phone: { type: String, required: true },
+    driverLicense: { type: String, required: true },
+    vehicleNoPlate: { type: String, required: true },
     vehicleType: { 
         type: String, 
         required: true,
@@ -23,21 +23,10 @@ const captainSchema = new mongoose.Schema({
         default: 'Offline'
     }
 }, { 
-    timestamps: true,
-    autoIndex: true
+    timestamps: true
 });
 
-// Drop all existing indexes
-mongoose.connection.on('connected', async () => {
-    try {
-        await mongoose.connection.db.collection('captains').dropIndexes();
-        console.log('Dropped all indexes from captains collection');
-    } catch (error) {
-        console.log('No indexes to drop or error dropping indexes:', error);
-    }
-});
-
-// Create new indexes
+// Create indexes
 captainSchema.index({ email: 1 }, { unique: true });
 captainSchema.index({ cnic: 1 }, { unique: true });
 captainSchema.index({ phone: 1 }, { unique: true });
