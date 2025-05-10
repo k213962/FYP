@@ -50,6 +50,7 @@ const CaptainSignup = () => {
 
     // Password validation
     if (password.length < 6) return "Password must be at least 6 characters!";
+<<<<<<< HEAD
     if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter!";
     if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter!";
     if (!/[0-9]/.test(password)) return "Password must contain at least one number!";
@@ -70,6 +71,13 @@ const CaptainSignup = () => {
     // Vehicle Type validation
     if (!vehicleType) return "Please select a vehicle type!";
 
+=======
+    if (!/^\d{13}$/.test(cnic)) return "CNIC must be 13 digits (e.g., 4212345678901)!";
+    if (!/^(\+92|03)\d{9}$/.test(mobile)) return "Mobile must be +923XXXXXXXXX or 03XXXXXXXXX!";
+    if (!/^[A-Z]{1}\d{7}$/.test(driverLicense)) return "Driver license must be in format L1234567!";
+    if (!/^[A-Z]{1,3}-\d{3}$/.test(vehiclePlateNo)) return "Vehicle plate must be in format A-010, AB-010, or ABC-010!";
+    if (!["ambulance", "fire-brigade", "police"].includes(vehicleType)) return "Please select a valid vehicle type!";
+>>>>>>> 0fb847e (User Work Done)
     return null;
   };
 
@@ -108,6 +116,7 @@ const CaptainSignup = () => {
       console.log("Response:", response.data);
 
       if (response.status === 201) {
+<<<<<<< HEAD
         Alert.alert(
           "Success", 
           "Captain account created successfully. Please login to continue.",
@@ -121,6 +130,13 @@ const CaptainSignup = () => {
             }
           ]
         );
+=======
+        const { user, token } = response.data;
+        setUser({ ...user, token });
+        Alert.alert("Success", "Captain account created successfully.");
+        resetForm();
+        router.push("./CaptainLogin");
+>>>>>>> 0fb847e (User Work Done)
       }
     } catch (error) {
       console.error("Signup failed:", error);
@@ -237,7 +253,11 @@ const CaptainSignup = () => {
       <Text style={styles.label}>Vehicle Plate No</Text>
       <TextInput
         style={styles.inputFull}
+<<<<<<< HEAD
         placeholder="Enter Vehicle Plate No"
+=======
+        placeholder="ABC-010"
+>>>>>>> 0fb847e (User Work Done)
         value={vehiclePlateNo}
         onChangeText={setVehiclePlateNo}
         maxLength={20}

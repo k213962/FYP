@@ -23,6 +23,22 @@ export default function CaptainLogin() {
       return;
     }
 
+<<<<<<< HEAD
+=======
+    // Match schema email validation
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@(gmail\.com|hotmail\.com)$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Error", "Email must be a valid Gmail or Hotmail address.");
+      return;
+    }
+
+    // Password must be at least 6 characters
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters long.");
+      return;
+    }
+
+>>>>>>> 0fb847e (User Work Done)
     try {
       const response = await axios.post(
         `${process.env.EXPO_PUBLIC_BASE_URL}/captain/login`,
