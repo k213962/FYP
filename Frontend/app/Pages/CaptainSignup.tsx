@@ -76,51 +76,80 @@ const CaptainSignup = () => {
   const handleSignup = async () => {
     const errorMessage = validateForm();
     if (errorMessage) {
-      Alert.alert("Error", errorMessage);
+      Alert.alert("Validation Error", errorMessage);
       return;
     }
 
     try {
-      console.log("Sending signup request to:", `${process.env.EXPO_PUBLIC_BASE_URL}/captain/register`);
-      console.log("Request Payload:", {
+      // Format mobile number to ensure it starts with '03'
+      const formattedMobile = mobile.startsWith('03') ? mobile : `03${mobile}`;
+      console.log("Original mobile:", mobile);
+      console.log("Formatted mobile:", formattedMobile);
+
+      const signupData = {
         fullname: { firstname: firstName, lastname: lastName },
         email,
         password,
         cnic,
-        mobile,
+        mobile: formattedMobile,
         driverLicense,
         vehiclePlateNo,
         vehicleType,
-      });
+      };
+
+      console.log("Sending signup request to:", `${process.env.EXPO_PUBLIC_BASE_URL}/captain/register`);
+      console.log("Request Payload:", JSON.stringify(signupData, null, 2));
 
       const response = await axios.post(
         `${process.env.EXPO_PUBLIC_BASE_URL}/captain/register`,
-        {
-          fullname: { firstname: firstName, lastname: lastName },
-          email,
-          password,
-          cnic,
-          mobile,
-          driverLicense,
-          vehiclePlateNo,
-          vehicleType,
-        }
+        signupData
       );
 
       console.log("Response:", response.data);
 
       if (response.status === 201) {
-        const { user, token } = response.data;
-        setUser({ ...user, token });
-        Alert.alert("Success", "Captain account created successfully.");
-        resetForm();
-        router.replace("./Home");
+        Alert.alert(
+          "Success", 
+          "Captain account created successfully. Please login to continue.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                resetForm();
+                router.replace("./CaptainLogin");
+              }
+            }
+          ]
+        );
       }
     } catch (error) {
       console.error("Signup failed:", error);
       const axiosError = error as AxiosError<ErrorResponse>;
-      console.error("Error Response:", axiosError.response?.data || axiosError.message);
-      Alert.alert("Registration Failed", axiosError.response?.data?.message || "An unexpected error occurred.");
+      
+      if (axiosError.response?.data?.message) {
+        console.log("Error response data:", axiosError.response.data);
+        const errorMessages = Array.isArray(axiosError.response.data.message) 
+          ? axiosError.response.data.message 
+          : [axiosError.response.data.message];
+
+        // Format error messages for better readability
+        const formattedErrors = errorMessages.map(msg => {
+          // Capitalize first letter and add period if missing
+          return msg.charAt(0).toUpperCase() + msg.slice(1) + (msg.endsWith('.') ? '' : '.');
+        });
+
+        Alert.alert(
+          "Registration Failed",
+          formattedErrors.join('\n\n'),
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert(
+          "Registration Failed",
+          "An unexpected error occurred. Please try again.",
+          [{ text: "OK" }]
+        );
+      }
     }
   };
 
@@ -221,9 +250,9 @@ const CaptainSignup = () => {
         onValueChange={(itemValue) => setVehicleType(itemValue)}
       >
         <Picker.Item label="Select Vehicle Type" value="" />
-        <Picker.Item label="Ambulance" value="Ambulance" />
-        <Picker.Item label="Police" value="Police" />
-        <Picker.Item label="Fire Brigade" value="Fire Brigade" />
+        <Picker.Item label="Ambulance" value="ambulance" />
+        <Picker.Item label="Police" value="police" />
+        <Picker.Item label="Fire Brigade" value="fire-brigade" />
       </Picker>
 
       <TouchableOpacity style={styles.button} onPress={handleSignup}>

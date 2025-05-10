@@ -15,13 +15,47 @@ exports.registerCaptain = async (req, res) => {
     const { fullname, email, password, cnic, mobile, driverLicense, vehiclePlateNo, vehicleType } = req.body;
 
     try {
-        // Check for existing captain
-        const existingCaptain = await Captain.findOne({ $or: [{ email }, { cnic }, { mobile }] });
+        console.log("Received registration data:", {
+            email,
+            cnic,
+            mobile,
+            driverLicense,
+            vehiclePlateNo,
+            vehicleType
+        });
+        
+        // Format mobile number to ensure consistency
+        const formattedPhone = mobile.startsWith('03') ? mobile : `03${mobile}`;
+        console.log("Formatted phone number:", formattedPhone);
+
+        // Check for existing captain with the same phone number
+        const existingPhone = await Captain.findOne({ phone: formattedPhone });
+        console.log("Existing phone check result:", existingPhone);
+
+        if (existingPhone) {
+            console.log("Phone number already exists in database");
+            return res.status(400).json({ message: ["Phone number already exists"] });
+        }
+
+        // Check for other existing fields
+        const existingCaptain = await Captain.findOne({ 
+            $or: [
+                { email }, 
+                { cnic }, 
+                { vehicleNoPlate: vehiclePlateNo },
+                { driverLicense }
+            ] 
+        });
+        
+        console.log("Existing captain check result:", existingCaptain);
+        
         if (existingCaptain) {
             const errorMessages = [];
-            if (existingCaptain.email === email) errorMessages.push("Captain with this email already exists");
+            if (existingCaptain.email === email) errorMessages.push("Email already exists");
             if (existingCaptain.cnic === cnic) errorMessages.push("CNIC already exists");
-            if (existingCaptain.mobile === mobile) errorMessages.push("Mobile number already exists");
+            if (existingCaptain.vehicleNoPlate === vehiclePlateNo) errorMessages.push("Vehicle plate number already exists");
+            if (existingCaptain.driverLicense === driverLicense) errorMessages.push("Driver license already exists");
+            console.log("Found existing captain with errors:", errorMessages);
             return res.status(400).json({ message: errorMessages });
         }
 
@@ -35,17 +69,39 @@ exports.registerCaptain = async (req, res) => {
             email,
             password: hashedPassword,
             cnic,
-            mobile,
+            phone: formattedPhone,
             driverLicense,
-            vehiclePlateNo,
-            vehicleType
+            vehicleNoPlate: vehiclePlateNo,
+            vehicleType: vehicleType.toLowerCase()
+        });
+
+        console.log("Attempting to save new captain:", {
+            email: captain.email,
+            phone: captain.phone,
+            vehicleNoPlate: captain.vehicleNoPlate
         });
 
         await captain.save();
+        console.log("Captain saved successfully");
         res.status(201).json({ message: "Captain registered successfully" });
 
     } catch (err) {
-        console.error("Error during registration:", err.message);
+        console.error("Error during registration:", err);
+        console.error("Error details:", {
+            message: err.message,
+            code: err.code,
+            keyPattern: err.keyPattern,
+            keyValue: err.keyValue
+        });
+        
+        if (err.code === 11000) {
+            // Handle duplicate key error
+            const field = Object.keys(err.keyPattern)[0];
+            console.log("Duplicate key error on field:", field);
+            return res.status(400).json({ 
+                message: [`${field} already exists`]
+            });
+        }
         res.status(500).json({ message: "Server Error", error: err.message });
     }
 };

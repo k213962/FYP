@@ -14,7 +14,7 @@ interface CaptainData {
     firstname: string;
     lastname: string;
   };
-  vehiclePlateNo: string;
+  vehicleNoPlate: string;
   vehicleType: string;
   hoursOnline?: number;
   status?: string;
@@ -27,14 +27,16 @@ const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
   const fetchCaptainData = async () => {
     try {
       const data = await getLoggedInCaptain();
-      console.log('Fetched captain data:', data);
+      console.log('Fetched captain data in component:', data);
       if (data) {
         const formattedData = {
           ...data,
           status: data.status || 'Offline'
         };
-        console.log('Formatted captain data:', formattedData);
+        console.log('Formatted captain data in component:', formattedData);
         setCaptainData(formattedData);
+      } else {
+        console.log('No captain data received');
       }
     } catch (error) {
       console.error('Error fetching captain data:', error);
@@ -98,7 +100,7 @@ const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
             }}
           />
           <Text style={styles.name}>
-            {captainData ? `${captainData.fullname.firstname} ${captainData.fullname.lastname}` : 'Captain'}
+            {captainData?.fullname ? `${captainData.fullname.firstname} ${captainData.fullname.lastname}` : 'Captain'}
           </Text>
         </View>
         <View style={styles.earnings}>
@@ -109,7 +111,7 @@ const CaptainInfoCard = ({ status, toggleStatus }: CaptainInfoCardProps) => {
 
       <View style={styles.rowBetween}>
         <View>
-          <Text style={styles.statValue}>{captainData?.vehiclePlateNo || 'N/A'}</Text>
+          <Text style={styles.statValue}>{captainData?.vehicleNoPlate || 'N/A'}</Text>
           <Text style={styles.label}>Plate Number</Text>
         </View>
         <View>

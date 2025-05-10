@@ -8,13 +8,11 @@ interface CaptainData {
   };
   email: string;
   cnic: string;
-  mobile: string;
-  vehiclePlateNo: string;
+  phone: string;
+  vehicleNoPlate: string;
   vehicleType: string;
   driverLicense: string;
   hoursOnline?: number;
-  activeCalls?: number;
-  totalResponses?: number;
   status?: string;
 }
 
@@ -26,6 +24,7 @@ export const getLoggedInCaptain = async (): Promise<CaptainData | null> => {
       return null;
     }
 
+    console.log('Making request to:', `${process.env.EXPO_PUBLIC_BASE_URL}/captain/profile`);
     const response = await axios.get(
       `${process.env.EXPO_PUBLIC_BASE_URL}/captain/profile`,
       {
@@ -35,13 +34,36 @@ export const getLoggedInCaptain = async (): Promise<CaptainData | null> => {
       }
     );
 
-    if (response.status === 200) {
-      console.log('Captain data:', response.data); // Debug log
-      return response.data;
+    if (response.status === 200 && response.data) {
+      console.log('Raw response data:', response.data);
+      const data = response.data;
+      
+      // Transform the data to match our interface
+      const transformedData: CaptainData = {
+        fullname: data.fullname,
+        email: data.email || '',
+        cnic: data.cnic || '',
+        phone: data.phone || '',
+        vehicleNoPlate: data.vehicleNoPlate || '',
+        vehicleType: data.vehicleType || '',
+        driverLicense: data.driverLicense || '',
+        hoursOnline: data.hoursOnline || 0,
+        status: data.status || 'Offline'
+      };
+      
+      console.log('Transformed data:', transformedData);
+      return transformedData;
     }
+    
+    console.error('Invalid response:', response);
     return null;
   } catch (error) {
     console.error('Error fetching captain data:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Response data:', error.response?.data);
+      console.error('Response status:', error.response?.status);
+      console.error('Error message:', error.message);
+    }
     return null;
   }
 };
