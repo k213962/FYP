@@ -42,33 +42,48 @@ const CaptainSignup = () => {
 
   const validateForm = () => {
     // Name validation
+    if (!firstName.trim()) return "First name is required!";
     if (firstName.length < 2) return "First name must be at least 2 characters!";
+    if (!/^[A-Za-z\s]+$/.test(firstName)) return "First name can only contain letters and spaces!";
+
+    if (!lastName.trim()) return "Last name is required!";
     if (lastName.length < 2) return "Last name must be at least 2 characters!";
+    if (!/^[A-Za-z\s]+$/.test(lastName)) return "Last name can only contain letters and spaces!";
 
     // Email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Invalid email format!";
+    if (!email.trim()) return "Email is required!";
+    if (!/^[a-zA-Z0-9._%+-]+@(gmail\.com|hotmail\.com)$/.test(email)) 
+      return "Please enter a valid Gmail or Hotmail address!";
 
     // Password validation
-    if (password.length < 6) return "Password must be at least 6 characters!";
-    if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter!";
-    if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter!";
-    if (!/[0-9]/.test(password)) return "Password must contain at least one number!";
+    if (!password) return "Password is required!";
+    if (password.length < 8) return "Password must be at least 8 characters!";
+    if (!/(?=.*[A-Z])/.test(password)) return "Password must contain at least one uppercase letter!";
+    if (!/(?=.*[0-9])/.test(password)) return "Password must contain at least one number!";
+    if (!/(?=.*[!@#$%^&*])/.test(password)) return "Password must contain at least one special character (!@#$%^&*)!";
 
     // CNIC validation
-    if (!/^[0-9]{13}$/.test(cnic)) return "CNIC must be exactly 13 digits!";
+    if (!cnic.trim()) return "CNIC is required!";
+    if (!/^\d{13}$/.test(cnic)) return "CNIC must be exactly 13 digits!";
 
     // Mobile validation
-    if (!/^[0-9]{10,15}$/.test(mobile)) return "Mobile number must be 10-15 digits!";
-    if (!mobile.startsWith('03')) return "Mobile number must start with '03'!";
+    if (!mobile.trim()) return "Mobile number is required!";
+    if (!/^03[0-9]{9}$/.test(mobile)) return "Mobile number must start with 03 and be 11 digits!";
 
     // Driver License validation
+    if (!driverLicense.trim()) return "Driver license is required!";
     if (driverLicense.length < 5) return "Driver license must be at least 5 characters!";
+    if (!/^[A-Za-z0-9-]+$/.test(driverLicense)) return "Driver license can only contain letters, numbers, and hyphens!";
 
-    // Vehicle Plate No validation
-    if (vehiclePlateNo.length < 5) return "Vehicle plate number must be at least 5 characters!";
+    // Vehicle Plate validation
+    if (!vehiclePlateNo.trim()) return "Vehicle plate number is required!";
+    if (!/^[A-Z]{3}-[0-9]{3,4}$/.test(vehiclePlateNo)) 
+      return "Vehicle plate must be in format ABC-123 or ABC-1234!";
 
     // Vehicle Type validation
     if (!vehicleType) return "Please select a vehicle type!";
+    if (!['ambulance', 'fire-brigade', 'police'].includes(vehicleType.toLowerCase())) 
+      return "Please select a valid vehicle type!";
 
     return null;
   };

@@ -7,15 +7,54 @@ const router = express.Router();
 
 // REGISTER
 router.post('/register', [
-    body('fullname.firstname').notEmpty().withMessage('First name is required'),
-    body('fullname.lastname').notEmpty().withMessage('Last name is required'),
-    body('email').isEmail().withMessage('Valid email is required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-    body('cnic').notEmpty().withMessage('CNIC is required'),
-    body('mobile').notEmpty().withMessage('Mobile number is required'),
-    body('driverLicense').notEmpty().withMessage('Driver license is required'),
-    body('vehiclePlateNo').notEmpty().withMessage('Vehicle plate number is required'),
-    body('vehicleType').notEmpty().withMessage('Vehicle type is required')
+    // Name validation
+    body('fullname.firstname')
+        .notEmpty().withMessage('First name is required')
+        .isLength({ min: 2 }).withMessage('First name must be at least 2 characters')
+        .matches(/^[A-Za-z\s]+$/).withMessage('First name can only contain letters and spaces'),
+    
+    body('fullname.lastname')
+        .notEmpty().withMessage('Last name is required')
+        .isLength({ min: 2 }).withMessage('Last name must be at least 2 characters')
+        .matches(/^[A-Za-z\s]+$/).withMessage('Last name can only contain letters and spaces'),
+    
+    // Email validation
+    body('email')
+        .isEmail().withMessage('Valid email is required')
+        .normalizeEmail(),
+    
+    // Password validation
+    body('password')
+        .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+        .matches(/^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])[A-Za-z0-9!@#$%^&*]{8,}$/)
+        .withMessage('Password must contain at least one uppercase letter, one number, and one special character'),
+    
+    // CNIC validation
+    body('cnic')
+        .notEmpty().withMessage('CNIC is required')
+        .isLength({ min: 13, max: 13 }).withMessage('CNIC must be exactly 13 digits')
+        .matches(/^[0-9]+$/).withMessage('CNIC must contain only numbers'),
+    
+    // Mobile validation
+    body('mobile')
+        .notEmpty().withMessage('Mobile number is required')
+        .matches(/^03[0-9]{9}$/).withMessage('Mobile number must start with 03 and be 11 digits'),
+    
+    // Driver License validation
+    body('driverLicense')
+        .notEmpty().withMessage('Driver license is required')
+        .isLength({ min: 5 }).withMessage('Driver license must be at least 5 characters')
+        .matches(/^[A-Za-z0-9-]+$/).withMessage('Driver license can only contain letters, numbers, and hyphens'),
+    
+    // Vehicle Plate validation
+    body('vehiclePlateNo')
+        .notEmpty().withMessage('Vehicle plate number is required')
+        .matches(/^[A-Z]{3}-[0-9]{3,4}$/).withMessage('Vehicle plate must be in format ABC-123 or ABC-1234'),
+    
+    // Vehicle Type validation
+    body('vehicleType')
+        .notEmpty().withMessage('Vehicle type is required')
+        .isIn(['ambulance', 'fire-brigade', 'police']).withMessage('Invalid vehicle type')
 ], CaptainController.registerCaptain);
 
 // LOGIN

@@ -31,13 +31,35 @@ export default function UserSignup() {
   const validateForm = () => {
     const { firstname, lastname, email, password, confirmPassword, cnic, mobile } = formData;
 
+    // Name validation
+    if (!firstname.trim()) return "First name is required!";
     if (firstname.length < 2) return "First name must be at least 2 characters!";
+    if (!/^[A-Za-z\s]+$/.test(firstname)) return "First name can only contain letters and spaces!";
+
+    if (!lastname.trim()) return "Last name is required!";
     if (lastname.length < 2) return "Last name must be at least 2 characters!";
-    if (!/^[a-zA-Z0-9._%+-]+@(gmail\.com|hotmail\.com)$/.test(email)) return "Email must be Gmail or Hotmail!";
-    if (password.length < 6) return "Password must be at least 6 characters!";
+    if (!/^[A-Za-z\s]+$/.test(lastname)) return "Last name can only contain letters and spaces!";
+
+    // Email validation
+    if (!email.trim()) return "Email is required!";
+    if (!/^[a-zA-Z0-9._%+-]+@(gmail\.com|hotmail\.com)$/.test(email)) 
+      return "Please enter a valid Gmail or Hotmail address!";
+
+    // Password validation
+    if (!password) return "Password is required!";
+    if (password.length < 8) return "Password must be at least 8 characters!";
+    if (!/(?=.*[A-Z])/.test(password)) return "Password must contain at least one uppercase letter!";
+    if (!/(?=.*[0-9])/.test(password)) return "Password must contain at least one number!";
+    if (!/(?=.*[!@#$%^&*])/.test(password)) return "Password must contain at least one special character (!@#$%^&*)!";
     if (password !== confirmPassword) return "Passwords do not match!";
-    if (!/^\d{13}$/.test(cnic)) return "CNIC must be 13 digits (e.g., 4212345678901)!";
-    if (!/^(\+92|03)\d{9}$/.test(mobile)) return "Mobile must be +923XXXXXXXXX or 03XXXXXXXXX!";
+
+    // CNIC validation
+    if (!cnic.trim()) return "CNIC is required!";
+    if (!/^\d{13}$/.test(cnic)) return "CNIC must be exactly 13 digits!";
+
+    // Mobile validation
+    if (!mobile.trim()) return "Mobile number is required!";
+    if (!/^03[0-9]{9}$/.test(mobile)) return "Mobile number must start with 03 and be 11 digits!";
 
     return null;
   };
@@ -101,7 +123,7 @@ export default function UserSignup() {
         <TextInput
           value={formData.password}
           onChangeText={(val) => handleInputChange("password", val)}
-          placeholder="Password (min 6 chars)"
+          placeholder="Password (min 8 chars, 1 uppercase, 1 number, 1 special char)"
           secureTextEntry
           style={styles.input}
         />
@@ -126,7 +148,7 @@ export default function UserSignup() {
         <TextInput
           value={formData.mobile}
           onChangeText={(val) => handleInputChange("mobile", val)}
-          placeholder="Mobile Number (+923XXXXXXXXX or 03XXXXXXXXX)"
+          placeholder="Mobile Number (03XXXXXXXXX)"
           keyboardType="phone-pad"
           style={styles.input}
         />
