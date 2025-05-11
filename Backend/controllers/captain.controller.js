@@ -226,3 +226,35 @@ exports.updateStats = async (req, res) => {
         res.status(500).json({ message: "Server Error", error: error.message });
     }
 };
+
+// Update Captain Location
+exports.updateLocation = async (req, res) => {
+    try {
+        const { latitude, longitude } = req.body;
+        const captainId = req.user.id;
+
+        if (!latitude || !longitude) {
+            return res.status(400).json({ message: "Latitude and longitude are required" });
+        }
+
+        const captain = await Captain.findByIdAndUpdate(
+            captainId,
+            {
+                location: {
+                    type: 'Point',
+                    coordinates: [longitude, latitude]
+                }
+            },
+            { new: true }
+        );
+
+        if (!captain) {
+            return res.status(404).json({ message: "Captain not found" });
+        }
+
+        res.json({ message: "Location updated successfully", captain });
+    } catch (err) {
+        console.error("Error updating location:", err.message);
+        res.status(500).json({ message: "Server Error", error: err.message });
+    }
+};

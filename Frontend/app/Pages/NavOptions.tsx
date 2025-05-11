@@ -44,13 +44,17 @@ const NavOptions = () => {
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        const userToken = await AsyncStorage.getItem("userToken");
-        setIsAuthenticated(!!userToken);
-        if (!userToken) router.replace("./UserLogin");
+        const token = await AsyncStorage.getItem("token");
+        console.log("Checking token:", token);
+        setIsAuthenticated(!!token);
+        if (!token) {
+          console.log("No token found, redirecting to login");
+          router.replace("/Pages/UserLogin");
+        }
       } catch (error) {
         console.error("Authentication Error:", error);
         setIsAuthenticated(false);
-        router.replace("./UserLogin");
+        router.replace("/Pages/UserLogin");
       }
     };
     checkLoginStatus();

@@ -6,7 +6,14 @@ const userRoutes = require("./routes/user.routes");
 const captainRoutes = require("./routes/captain.routes");
 const mapRoutes = require("./routes/map.routes");
 const rideRoutes = require("./routes/ride.routes");
+const http = require('http');
+const socketIO = require('./socket');
+
 const app = express();
+const server = http.createServer(app);
+
+// Initialize socket.io
+socketIO.init(server);
 
 // Middleware
 app.use(express.json());
@@ -20,11 +27,18 @@ app.use("/rides", rideRoutes);
 app.use("/test", (req, res) => {
   res.json({ message: "Hello from Express!" });
 });
+
 // Connect to MongoDB
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected"))
   .catch((err) => console.log("MongoDB Connection Error:", err));
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Something went wrong!' });
+});
+
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -1,5 +1,7 @@
 const rideService = require('../services/ride.service');
 const { validationResult } = require('express-validator');
+const socketIO = require('../socket');
+
 module.exports.createRide = async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -7,29 +9,94 @@ module.exports.createRide = async (req, res) => {
     }
 
     try {
-        console.log('Authenticated User:', req.user); // Check the user in the request
-        console.log('Request Body:', req.body); // Check the request body
+        const { emergencyLocation, serviceType, emergencyType, description } = req.body;
+        const userId = req.user.id;
 
-        const { destination, vehicleType } = req.body;  // Get from body
-        const userId = req.user.id;  // Get from token (auth)
+        // Create emergency request
+        const ride = await rideService.createRide(userId, {
+            emergencyLocation,
+            serviceType,
+            emergencyType,
+            description
+        });
 
-        // Check if destination, vehicleType, or userId is missing
-        if (!destination || !vehicleType || !userId) {
-            console.error('Missing required fields');
-            return res.status(400).json({ error: 'User, destination, and vehicle type are required' });
-        }
+        // Find nearby drivers
+        const nearbyDrivers = await rideService.findNearbyDrivers(emergencyLocation, serviceType);
 
-        // Pass the parameters correctly to the service
-        const ride = await rideService.createRide(userId, destination, vehicleType);
+        // Notify nearby drivers and add them to a room for this ride
+        const io = socketIO.getIO();
+        nearbyDrivers.forEach(driver => {
+            io.to(driver._id.toString()).emit('newEmergencyRequest', {
+                rideId: ride._id,
+                emergencyLocation,
+                serviceType,
+                emergencyType,
+                description
+            });
 
-        if (!ride) {
-            return res.status(400).json({ error: 'Failed to create ride' });
-        }
+            // Optional: you can have drivers join the ride room on client-side
+            // socket.join(`ride_${ride._id}`);
+        });
 
-        return res.status(201).json({ message: 'Ride created successfully', ride });
+        return res.status(201).json({ 
+            message: 'Emergency request created successfully', 
+            ride,
+            nearbyDrivers: nearbyDrivers.length
+        });
 
     } catch (error) {
-        console.error('Error creating ride:', error.message);
+        console.error('Error creating emergency request:', error.message);
         return res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+};
+
+module.exports.acceptRide = async (req, res) => {
+    try {
+        const { rideId } = req.params;
+        const captainId = req.user.id;
+
+        const ride = await rideService.acceptRide(rideId, captainId);
+
+        if (!ride) {
+            return res.status(404).json({ error: 'Ride not found or already accepted' });
+        }
+
+        // Notify all drivers in the ride room that it was accepted
+        const io = socketIO.getIO();
+        io.to(`ride_${rideId}`).emit('emergencyRequestAccepted', {
+            rideId,
+            acceptedBy: captainId
+        });
+
+        return res.status(200).json({ 
+            message: 'Emergency request accepted successfully',
+            ride
+        });
+
+    } catch (error) {
+        console.error('Error accepting emergency request:', error.message);
+        return res.status(400).json({ error: error.message });
+    }
+};
+
+module.exports.startRide = async (req, res) => {
+    try {
+        const { rideId } = req.params;
+        const captainId = req.user.id;
+
+        const ride = await rideService.startRide(rideId, captainId);
+
+        if (!ride) {
+            return res.status(404).json({ error: 'Ride not found or not accepted yet' });
+        }
+
+        return res.status(200).json({
+            message: 'Ride started successfully',
+            ride
+        });
+
+    } catch (error) {
+        console.error('Error starting ride:', error.message);
+        return res.status(400).json({ error: error.message });
     }
 };

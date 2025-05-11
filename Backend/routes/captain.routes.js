@@ -54,7 +54,7 @@ router.post('/register', [
     // Vehicle Type validation
     body('vehicleType')
         .notEmpty().withMessage('Vehicle type is required')
-        .isIn(['ambulance', 'fire-brigade', 'police']).withMessage('Invalid vehicle type')
+        .isIn(['ambulance', 'fire', 'police']).withMessage('Invalid vehicle type')
 ], CaptainController.registerCaptain);
 
 // LOGIN
@@ -71,5 +71,8 @@ router.patch('/status', auth, CaptainController.updateStatus);
 
 // Update Captain Stats
 router.patch('/stats', auth, CaptainController.updateStats);
+
+// Update location
+router.post('/location', auth, CaptainController.updateLocation);
 
 module.exports = router; 

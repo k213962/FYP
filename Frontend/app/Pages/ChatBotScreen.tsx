@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import Voice from '@react-native-voice/voice'; // Voice recognition
-import { Audio } from 'expo-av'; // Microphone permission
+import { Audio } from 'expo-audio'; // For audio
+import { Video } from 'expo-video'; // For video
+
 
 // Import images
 import sendIcon from '../../assets/send.png';

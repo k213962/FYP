@@ -8,30 +8,59 @@ const rideSchema = new mongoose.Schema({
     },
     captain: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
+        ref: 'Captain',
     },
-    current: {
+    emergencyLocation: {
+        type: {
+            type: String,
+            enum: ['Point'],
+            required: true
+        },
+        coordinates: {
+            type: [Number],
+            required: true
+        }
+    },
+    serviceType: {
         type: String,
+        required: true,
+        enum: ['ambulance', 'fire', 'police']
     },
-    destination: {
+    emergencyType: {
+        type: String,
+        required: true
+    },
+    description: {
         type: String,
         required: true
     },
     status: {
         type: String,
-        enum: ['pending', 'accepted', 'ongoing', 'completed', 'cancelled'],
+        enum: ['pending', 'accepted', 'ride-started', 'completed', 'cancelled'],
         default: 'pending'
-    }, 
-    distance: {
-        type: Number,
-
     },
-    vehicleType: {
-        type: String,
-        enum: ['Ambulance', 'Fire', 'Police'],
-        required: true
+    acceptedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Captain'
     },
-});
+    estimatedArrivalTime: {
+        type: Date
+    },
+    actualArrivalTime: {
+        type: Date
+    },
+    completionTime: {
+        type: Date
+    }
+}, { timestamps: true });
 
-// THIS is the correct way to export the model
-module.exports = mongoose.model('ride', rideSchema);
+// Create geospatial index for emergency location
+rideSchema.index({ emergencyLocation: '2dsphere' });
+
+// Force index creation
+const Ride = mongoose.model('ride', rideSchema);
+Ride.init()
+    .then(() => console.log('Ride indexes built successfully.'))
+    .catch(err => console.error('Error building indexes:', err));
+
+module.exports = Ride;

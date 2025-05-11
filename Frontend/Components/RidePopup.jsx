@@ -1,12 +1,87 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useRouter } from "expo-router";
-const EmergencyPopup = ({ onClose }) => {
-  const router = useRouter();
-  return (
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import io from 'socket.io-client';
 
+const EmergencyPopup = ({ onClose, emergencyData }) => {
+  // ✅ Prevent component from rendering if no data
+  if (!emergencyData) return null;
+
+  const router = useRouter();
+  const [socket, setSocket] = useState(null);
+
+  useEffect(() => {
+    const newSocket = io(process.env.EXPO_PUBLIC_BASE_URL, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    newSocket.on('connect', () => {
+      console.log('Socket connected successfully');
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+    });
+
+    newSocket.on('emergencyRequestAccepted', (data) => {
+      if (data.rideId === emergencyData?.rideId) {
+        Alert.alert(
+          'Request Accepted',
+          'Another driver has accepted this emergency request.',
+          [{ text: 'OK', onPress: onClose }]
+        );
+      }
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      if (newSocket) {
+        newSocket.disconnect();
+      }
+    };
+  }, [emergencyData?.rideId]); // ✅ use optional chaining
+
+  const handleAccept = async () => {
+    try {
+      const userToken = await AsyncStorage.getItem("userToken");
+      if (!userToken) {
+        Alert.alert('Error', 'Authentication required');
+        return;
+      }
+
+      const response = await axios.post(
+        `${process.env.EXPO_PUBLIC_BASE_URL}/rides/${emergencyData?.rideId}/accept`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${userToken}`
+          }
+        }
+      );
+
+      if (response.status === 200) {
+        router.push({
+          pathname: '/Pages/CaptainRiding',
+          params: { rideId: emergencyData?.rideId }
+        });
+      }
+    } catch (error) {
+      if (error.response?.status === 400) {
+        Alert.alert('Error', 'This request has already been accepted by another driver');
+      } else {
+        Alert.alert('Error', 'Failed to accept request. Please try again.');
+      }
+    }
+  };
+
+  return (
     <View style={styles.container}>
-      {/* Arrow button */}
       <TouchableOpacity style={styles.arrowContainer} onPress={onClose}>
         <Text style={styles.arrow}>↓</Text>
       </TouchableOpacity>
@@ -21,21 +96,35 @@ const EmergencyPopup = ({ onClose }) => {
               uri: 'https://i.pinimg.com/236x/af/26/28/af26280b0ca305be47df0b799ed1b12b.jpg',
             }}
           />
-          <Text style={styles.username}>Sarah Khan</Text>
+          <Text style={styles.username}>{emergencyData?.userName || 'Emergency User'}</Text>
         </View>
-        <Text style={styles.distance}>1.5 KM Away</Text>
+        <Text style={styles.distance}>{emergencyData?.distance || 'Nearby'}</Text>
       </View>
 
       <View style={styles.details}>
         <View style={styles.detailRow}>
           <Text style={styles.icon}>📍</Text>
           <View>
-            <Text style={styles.detailTitle}>Incident Location</Text>
-            <Text style={styles.detailSubtitle}>Near Gulshan Park, Block 7</Text>
+            <Text style={styles.detailTitle}>Emergency Location</Text>
+            <Text style={styles.detailSubtitle}>{emergencyData?.location || 'Location not specified'}</Text>
           </View>
         </View>
 
-      
+        <View style={styles.detailRow}>
+          <Text style={styles.icon}>🚑</Text>
+          <View>
+            <Text style={styles.detailTitle}>Emergency Type</Text>
+            <Text style={styles.detailSubtitle}>{emergencyData?.emergencyType || 'N/A'}</Text>
+          </View>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.icon}>📝</Text>
+          <View>
+            <Text style={styles.detailTitle}>Description</Text>
+            <Text style={styles.detailSubtitle}>{emergencyData?.description || 'N/A'}</Text>
+          </View>
+        </View>
 
         <View style={styles.detailRow}>
           <Text style={styles.icon}>🕒</Text>
@@ -47,10 +136,8 @@ const EmergencyPopup = ({ onClose }) => {
       </View>
 
       <View style={styles.buttons}>
-        <TouchableOpacity onPress={() => router.push('/Pages/CaptainRiding')}
-          style={styles.acceptButton}>
-          <Text style={styles.acceptText}>Respond</Text>
-           
+        <TouchableOpacity onPress={handleAccept} style={styles.acceptButton}>
+          <Text style={styles.acceptText}>Accept Request</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.ignoreButton} onPress={onClose}>
           <Text style={styles.ignoreText}>Ignore</Text>
@@ -144,18 +231,18 @@ const styles = StyleSheet.create({
   },
   acceptText: {
     color: '#fff',
-    fontWeight: '600',
     fontSize: 16,
+    fontWeight: '600',
   },
   ignoreButton: {
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#f3f4f6',
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
   ignoreText: {
-    color: '#374151',
-    fontWeight: '600',
+    color: '#4b5563',
     fontSize: 16,
+    fontWeight: '600',
   },
 });

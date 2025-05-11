@@ -1,171 +1,232 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-} from "react-native";
-import { useRouter } from "expo-router";
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import * as Location from 'expo-location';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { io, Socket } from 'socket.io-client';
 
-const { height } = Dimensions.get("window");
+interface Ride {
+  _id: string;
+  emergencyType: string;
+  emergencyLocation: {
+    address?: string;
+    coordinates: [number, number];
+  };
+  status: 'pending' | 'accepted' | 'ride-started' | 'completed' | 'cancelled';
+  actualArrivalTime?: string;
+}
+
+const socket: Socket = io(process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3000');
 
 const CaptainRiding = () => {
+  const params = useLocalSearchParams();
   const router = useRouter();
-  const [currentLocation, setCurrentLocation] = useState({
-    latitude: 24.8607,
-    longitude: 67.0011,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  });
+  const [ride, setRide] = useState<Ride | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Permission to access location was denied');
+    const rideId = params.rideId as string;
+
+    if (!rideId) {
+      setError('No ride ID provided');
+      setLoading(false);
+      return;
+    }
+
+    fetchRideDetails(rideId);
+
+    // Join the ride room for real-time updates
+    socket.emit('joinRoom', `ride_${rideId}`);
+
+    // Listen for ride updates
+    socket.on('rideUpdated', (updatedRide: Ride) => {
+      if (updatedRide._id === rideId) {
+        setRide(updatedRide);
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      socket.emit('leaveRoom', `ride_${rideId}`);
+      socket.off('rideUpdated');
+    };
+  }, [params.rideId]);
+
+  const fetchRideDetails = async (rideId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        setError('Authentication required');
+        router.replace('/Pages/UserLogin');
         return;
       }
 
-      let location = await Location.getCurrentPositionAsync({});
-      setCurrentLocation({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
+      const baseUrl = process.env.EXPO_PUBLIC_BASE_URL;
+      if (!baseUrl) {
+        setError('Base URL is not defined');
+        return;
+      }
+
+      const response = await axios.get(`${baseUrl}/rides/${rideId}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-    })();
-  }, []);
+
+      if (response.data && response.data.ride) {
+        setRide(response.data.ride);
+      } else {
+        setError('Invalid ride data received');
+      }
+    } catch (error: any) {
+      console.error('Error fetching ride details:', error);
+      setError(error.response?.data?.message || 'Failed to fetch ride details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartRide = async () => {
+    if (!params.rideId) {
+      Alert.alert('Error', 'No ride ID available');
+      return;
+    }
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Error', 'Authentication required');
+        router.replace('/Pages/UserLogin');
+        return;
+      }
+
+      const baseUrl = process.env.EXPO_PUBLIC_BASE_URL;
+      if (!baseUrl) {
+        Alert.alert('Error', 'Base URL is not defined');
+        return;
+      }
+
+      const response = await axios.post(
+        `${baseUrl}/rides/${params.rideId}/start`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.status === 200 && response.data.ride) {
+        setRide(response.data.ride);
+        Alert.alert('Success', 'Ride started successfully');
+      } else {
+        Alert.alert('Error', 'Failed to start ride');
+      }
+    } catch (error: any) {
+      console.error('Error starting ride:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to start ride');
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>Loading ride details...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.button} onPress={() => router.replace('/Pages/Home')}>
+          <Text style={styles.buttonText}>Return to Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!ride) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Ride not found</Text>
+        <TouchableOpacity style={styles.button} onPress={() => router.replace('/Pages/Home')}>
+          <Text style={styles.buttonText}>Return to Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Map Section */}
-      <View style={styles.mapContainer}>
-        <MapView
-          provider={PROVIDER_GOOGLE}
-          style={styles.map}
-          region={currentLocation}
-          showsUserLocation={true}
-          showsMyLocationButton={true}
-        />
+      <Text style={styles.title}>Ride Details</Text>
+      <View style={styles.detailsContainer}>
+        <Text style={styles.detailText}>Emergency Type: {ride.emergencyType}</Text>
+        <Text style={styles.detailText}>Status: {ride.status}</Text>
+        {ride.emergencyLocation?.address && (
+          <Text style={styles.detailText}>Location: {ride.emergencyLocation.address}</Text>
+        )}
+        {ride.actualArrivalTime && (
+          <Text style={styles.detailText}>
+            Arrival Time: {new Date(ride.actualArrivalTime).toLocaleString()}
+          </Text>
+        )}
       </View>
-
-      {/* Uber Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={() => router.push('./CaptainHome')}
-        >
-          <Image
-            source={require('../../assets/images/logoutcaptain.png')}
-            style={styles.logoutImage}
-          />
+      {ride.status === 'accepted' && (
+        <TouchableOpacity style={styles.button} onPress={handleStartRide}>
+          <Text style={styles.buttonText}>Start Ride</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Emergency Bottom Panel */}
-      <View style={styles.bottomPanel}>
-        <Text style={styles.kmText}>4 KM away</Text>
-        <TouchableOpacity
-          style={styles.completeBtn}
-          onPress={() => alert("Ride Completed")}
-        >
-          <Text style={styles.completeBtnText}>Complete Ride</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </View>
   );
 };
 
-export default CaptainRiding;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
-  },
-  mapContainer: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  header: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  logo: {
-    width: 70,
-    height: 30,
-    resizeMode: "contain",
-  },
-  menuBtn: {
-    backgroundColor: "#eee",
-    padding: 10,
-    borderRadius: 20,
-  },
-  logoutBtn: {
-    height: 40,
-    width: 40,
-    backgroundColor: 'white',
-    borderRadius: 20,
+    padding: 20,
+    backgroundColor: '#fff',
     justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
   },
-  logoutImage: {
-    width: 24,
-    height: 24,
-    resizeMode: 'contain',
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  bottomPanel: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    backgroundColor: "white",
-    paddingVertical: 25,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
+  detailsContainer: {
+    backgroundColor: '#f5f5f5',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 20,
   },
-  kmText: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "red",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  completeBtn: {
-    backgroundColor: "red",
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 12,
-    width: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  completeBtnText: {
-    color: "#fff",
-    fontWeight: "bold",
+  detailText: {
     fontSize: 16,
+    marginBottom: 10,
+    color: '#333',
+  },
+  button: {
+    backgroundColor: '#007AFF',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  loadingText: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#dc2626',
+    marginBottom: 20,
   },
 });
+
+export default CaptainRiding;

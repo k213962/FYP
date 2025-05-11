@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import axios from "axios";
 import { useRouter } from "expo-router";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function UserSignup() {
   const router = useRouter();
@@ -23,6 +26,8 @@ export default function UserSignup() {
     cnic: "",
     mobile: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -67,7 +72,7 @@ export default function UserSignup() {
   const handleSignup = async () => {
     const errorMessage = validateForm();
     if (errorMessage) {
-      Alert.alert("Error", errorMessage);
+      Alert.alert("Validation Error", errorMessage);
       return;
     }
 
@@ -84,139 +89,268 @@ export default function UserSignup() {
       });
 
       if (response.status === 201) {
-        Alert.alert("Success", "Account created successfully!");
-        router.push("./UserLogin");
+        Alert.alert(
+          "Registration Successful",
+          "Your account has been created successfully!",
+          [
+            {
+              text: "Proceed to Login",
+              onPress: () => router.push("./UserLogin"),
+            },
+          ]
+        );
       }
-    } catch (error) {
-      Alert.alert("Signup Failed", error.response?.data?.message || "Something went wrong");
+    } catch (error: any) {
+      Alert.alert(
+        "Registration Failed",
+        error.response?.data?.message || "An error occurred during registration. Please try again."
+      );
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer}>
-      <View style={styles.container}>
-        <Image source={require("../../assets/logo.png")} style={styles.logo} />
-        <Text style={styles.title}>User Signup</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.keyboardAvoidingView}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.container}>
+          <Image source={require("../../assets/logo.png")} style={styles.logo} />
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Please fill in your details to register</Text>
 
-        <TextInput
-          value={formData.firstname}
-          onChangeText={(val) => handleInputChange("firstname", val)}
-          placeholder="First Name"
-          style={styles.input}
-        />
+          <View style={styles.formContainer}>
+            <View style={styles.nameContainer}>
+              <View style={styles.nameInputContainer}>
+                <Text style={styles.label}>First Name</Text>
+                <TextInput
+                  value={formData.firstname}
+                  onChangeText={(val) => handleInputChange("firstname", val)}
+                  placeholder="Enter first name"
+                  style={styles.input}
+                  placeholderTextColor="#666"
+                />
+              </View>
+              <View style={styles.nameInputContainer}>
+                <Text style={styles.label}>Last Name</Text>
+                <TextInput
+                  value={formData.lastname}
+                  onChangeText={(val) => handleInputChange("lastname", val)}
+                  placeholder="Enter last name"
+                  style={styles.input}
+                  placeholderTextColor="#666"
+                />
+              </View>
+            </View>
 
-        <TextInput
-          value={formData.lastname}
-          onChangeText={(val) => handleInputChange("lastname", val)}
-          placeholder="Last Name"
-          style={styles.input}
-        />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Address</Text>
+              <TextInput
+                value={formData.email}
+                onChangeText={(val) => handleInputChange("email", val)}
+                placeholder="Enter Gmail or Hotmail"
+                keyboardType="email-address"
+                style={styles.input}
+                placeholderTextColor="#666"
+                autoCapitalize="none"
+              />
+            </View>
 
-        <TextInput
-          value={formData.email}
-          onChangeText={(val) => handleInputChange("email", val)}
-          placeholder="Email (Gmail/Hotmail)"
-          keyboardType="email-address"
-          style={styles.input}
-        />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  value={formData.password}
+                  onChangeText={(val) => handleInputChange("password", val)}
+                  placeholder="Enter password"
+                  secureTextEntry={!showPassword}
+                  style={[styles.input, styles.passwordInput]}
+                  placeholderTextColor="#666"
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={24}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-        <TextInput
-          value={formData.password}
-          onChangeText={(val) => handleInputChange("password", val)}
-          placeholder="Password (min 8 chars, 1 uppercase, 1 number, 1 special char)"
-          secureTextEntry
-          style={styles.input}
-        />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  value={formData.confirmPassword}
+                  onChangeText={(val) => handleInputChange("confirmPassword", val)}
+                  placeholder="Confirm your password"
+                  secureTextEntry={!showConfirmPassword}
+                  style={[styles.input, styles.passwordInput]}
+                  placeholderTextColor="#666"
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  <Ionicons
+                    name={showConfirmPassword ? "eye-off" : "eye"}
+                    size={24}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-        <TextInput
-          value={formData.confirmPassword}
-          onChangeText={(val) => handleInputChange("confirmPassword", val)}
-          placeholder="Confirm Password"
-          secureTextEntry
-          style={styles.input}
-        />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>CNIC Number</Text>
+              <TextInput
+                value={formData.cnic}
+                onChangeText={(val) => handleInputChange("cnic", val)}
+                placeholder="Enter 13-digit CNIC"
+                keyboardType="numeric"
+                maxLength={13}
+                style={styles.input}
+                placeholderTextColor="#666"
+              />
+            </View>
 
-        <TextInput
-          value={formData.cnic}
-          onChangeText={(val) => handleInputChange("cnic", val)}
-          placeholder="CNIC (13 digits)"
-          keyboardType="numeric"
-          maxLength={13}
-          style={styles.input}
-        />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Mobile Number</Text>
+              <TextInput
+                value={formData.mobile}
+                onChangeText={(val) => handleInputChange("mobile", val)}
+                placeholder="Enter mobile number (03XXXXXXXXX)"
+                keyboardType="phone-pad"
+                style={styles.input}
+                placeholderTextColor="#666"
+              />
+            </View>
 
-        <TextInput
-          value={formData.mobile}
-          onChangeText={(val) => handleInputChange("mobile", val)}
-          placeholder="Mobile Number (03XXXXXXXXX)"
-          keyboardType="phone-pad"
-          style={styles.input}
-        />
+            <TouchableOpacity style={styles.button} onPress={handleSignup}>
+              <Text style={styles.buttonText}>Create Account</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity style={styles.button} onPress={handleSignup}>
-          <Text style={styles.buttonText}>Sign Up</Text>
-        </TouchableOpacity>
-
-        <View style={styles.loginContainer}>
-          <Text>Already have an account?</Text>
-          <TouchableOpacity onPress={() => router.push("./UserLogin")}>
-            <Text style={styles.loginLink}> Login</Text>
-          </TouchableOpacity>
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>Already have an account?</Text>
+              <TouchableOpacity onPress={() => router.push("./UserLogin")}>
+                <Text style={styles.loginLink}> Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
+  keyboardAvoidingView: {
+    flex: 1,
     backgroundColor: "#fff",
   },
+  scrollContainer: {
+    flexGrow: 1,
+    padding: 20,
+  },
   container: {
-    width: "100%",
+    flex: 1,
     alignItems: "center",
   },
   logo: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     marginBottom: 20,
+    resizeMode: "contain",
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "bold",
+    color: "#1a1a1a",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 30,
+    textAlign: "center",
+  },
+  formContainer: {
+    width: "100%",
+    maxWidth: 500,
+  },
+  nameContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  nameInputContainer: {
+    flex: 1,
+  },
+  inputGroup: {
     marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
   },
   input: {
     width: "100%",
-    padding: 12,
+    padding: 15,
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    marginBottom: 10,
+    borderColor: "#ddd",
+    borderRadius: 10,
     fontSize: 16,
+    backgroundColor: "#f8f8f8",
+  },
+  passwordContainer: {
+    position: "relative",
+  },
+  passwordInput: {
+    paddingRight: 50,
+  },
+  eyeIcon: {
+    position: "absolute",
+    right: 15,
+    top: 15,
   },
   button: {
-    backgroundColor: "black",
-    padding: 15,
-    borderRadius: 8,
-    width: "100%",
+    backgroundColor: "#007AFF",
+    padding: 16,
+    borderRadius: 10,
     alignItems: "center",
+    marginTop: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   buttonText: {
     color: "#fff",
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "600",
   },
   loginContainer: {
     flexDirection: "row",
-    marginTop: 20,
+    justifyContent: "center",
+    marginTop: 25,
+    paddingBottom: 20,
+  },
+  loginText: {
+    fontSize: 16,
+    color: "#666",
   },
   loginLink: {
-    color: "blue",
-    marginLeft: 5,
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "600",
   },
 });

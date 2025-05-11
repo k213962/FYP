@@ -97,11 +97,48 @@ const Home = () => {
         return;
       }
 
+      if (!vehicle) {
+        Alert.alert("Error", "Please select a vehicle type first.");
+        return;
+      }
+
+      if (!location) {
+        Alert.alert("Error", "Location is required.");
+        return;
+      }
+
+      // Format the emergency location data
+      const emergencyLocation = {
+        type: 'Point',
+        coordinates: [fixedRegion.longitude, fixedRegion.latitude]
+      };
+
+      // Calculate estimated arrival time (15 minutes from now)
+      const estimatedArrivalTime = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+      // Convert vehicle type to match backend enum
+      let serviceType = vehicle.toLowerCase();
+      if (serviceType === 'fire brigade') {
+        serviceType = 'fire';
+      }
+
+      // Log the request data for debugging
+      console.log('Creating ride with data:', {
+        emergencyLocation,
+        serviceType,
+        emergencyType: "Emergency",
+        description: `Emergency request at ${location}`,
+        estimatedArrivalTime
+      });
+
       const response = await axios.post(
         `${baseUrl}/rides/create`,
         {
-          destination: location,
-          vehicleType: vehicle,
+          emergencyLocation,
+          serviceType,
+          emergencyType: "Emergency",
+          description: `Emergency request at ${location}`,
+          estimatedArrivalTime
         },
         {
           headers: {
@@ -113,9 +150,10 @@ const Home = () => {
       console.log("Ride created successfully:", response.data);
       setRideResponse(response.data);
       setSearchingForDriver(true);
-    } catch (error) {
-      console.error("Error creating ride:", error);
-      Alert.alert("Error", "Failed to create ride. Please try again.");
+    } catch (error: any) {
+      console.error("Error creating ride:", error.response?.data || error.message);
+      const errorMessage = error.response?.data?.error || error.message || "Failed to create ride. Please try again.";
+      Alert.alert("Error", errorMessage);
     }
   };
 
