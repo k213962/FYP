@@ -44,7 +44,7 @@ const UserLogin = () => {
         Alert.alert("Success", "Login successful!");
         router.replace("./NavOptions");
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error during login:", error.response?.data?.message || error.message);
       Alert.alert(
         "Login Failed",

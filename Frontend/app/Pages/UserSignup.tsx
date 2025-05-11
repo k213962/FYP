@@ -1,6 +1,13 @@
 import { useState } from "react";
-import { 
-  View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ScrollView, Image 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  ScrollView,
+  Image,
 } from "react-native";
 import axios from "axios";
 import { useRouter } from "expo-router";
@@ -26,11 +33,11 @@ export default function UserSignup() {
 
     if (firstname.length < 2) return "First name must be at least 2 characters!";
     if (lastname.length < 2) return "Last name must be at least 2 characters!";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Invalid email format!";
+    if (!/^[a-zA-Z0-9._%+-]+@(gmail\.com|hotmail\.com)$/.test(email)) return "Email must be Gmail or Hotmail!";
     if (password.length < 6) return "Password must be at least 6 characters!";
     if (password !== confirmPassword) return "Passwords do not match!";
-    if (!/^[0-9]{13}$/.test(cnic)) return "CNIC must be exactly 13 digits!";
-    if (!/^[0-9]{10,15}$/.test(mobile)) return "Mobile number must be 10-15 digits!";
+    if (!/^\d{13}$/.test(cnic)) return "CNIC must be 13 digits (e.g., 4212345678901)!";
+    if (!/^(\+92|03)\d{9}$/.test(mobile)) return "Mobile must be +923XXXXXXXXX or 03XXXXXXXXX!";
 
     return null;
   };
@@ -44,20 +51,21 @@ export default function UserSignup() {
 
     try {
       const response = await axios.post(`${process.env.EXPO_PUBLIC_BASE_URL}/user/register`, {
-        fullname: { firstname: formData.firstname, lastname: formData.lastname },
+        fullname: {
+          firstname: formData.firstname,
+          lastname: formData.lastname,
+        },
         email: formData.email,
         password: formData.password,
         cnic: formData.cnic,
         mobile: formData.mobile,
       });
 
-      console.log("API URL:", `${process.env.EXPO_PUBLIC_BASE_URL}/user/register`);
-
       if (response.status === 201) {
         Alert.alert("Success", "Account created successfully!");
         router.push("./UserLogin");
       }
-    } catch (error :any) {
+    } catch (error) {
       Alert.alert("Signup Failed", error.response?.data?.message || "Something went wrong");
     }
   };
@@ -85,7 +93,7 @@ export default function UserSignup() {
         <TextInput
           value={formData.email}
           onChangeText={(val) => handleInputChange("email", val)}
-          placeholder="Email"
+          placeholder="Email (Gmail/Hotmail)"
           keyboardType="email-address"
           style={styles.input}
         />
@@ -93,7 +101,7 @@ export default function UserSignup() {
         <TextInput
           value={formData.password}
           onChangeText={(val) => handleInputChange("password", val)}
-          placeholder="Password"
+          placeholder="Password (min 6 chars)"
           secureTextEntry
           style={styles.input}
         />
@@ -118,7 +126,7 @@ export default function UserSignup() {
         <TextInput
           value={formData.mobile}
           onChangeText={(val) => handleInputChange("mobile", val)}
-          placeholder="Mobile Number"
+          placeholder="Mobile Number (+923XXXXXXXXX or 03XXXXXXXXX)"
           keyboardType="phone-pad"
           style={styles.input}
         />
@@ -139,13 +147,54 @@ export default function UserSignup() {
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#fff" },
-  container: { width: "100%", alignItems: "center" },
-  logo: { width: 100, height: 100, marginBottom: 20 },
-  title: { fontSize: 24, fontWeight: "bold", marginBottom: 20 },
-  input: { width: "100%", padding: 12, borderWidth: 1, borderColor: "#ccc", borderRadius: 8, marginBottom: 10, fontSize: 16 },
-  button: { backgroundColor: "black", padding: 15, borderRadius: 8, width: "100%", alignItems: "center" },
-  buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-  loginContainer: { flexDirection: "row", marginTop: 20 },
-  loginLink: { color: "blue", marginLeft: 5 },
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#fff",
+  },
+  container: {
+    width: "100%",
+    alignItems: "center",
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+  input: {
+    width: "100%",
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    marginBottom: 10,
+    fontSize: 16,
+  },
+  button: {
+    backgroundColor: "black",
+    padding: 15,
+    borderRadius: 8,
+    width: "100%",
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  loginContainer: {
+    flexDirection: "row",
+    marginTop: 20,
+  },
+  loginLink: {
+    color: "blue",
+    marginLeft: 5,
+  },
 });
