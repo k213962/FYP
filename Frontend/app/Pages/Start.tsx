@@ -15,7 +15,7 @@ export default function Start() {
         </Text>
 
         {/* Navigate to UserLogin */}
-        <TouchableOpacity style={styles.button} onPress={() => router.push("./UserLogin")}>
+        <TouchableOpacity style={styles.button} onPress={() => router.replace("/Pages/UserLogin")}>
           <Text style={styles.buttonText}>Continue</Text>
         </TouchableOpacity>
       </View>

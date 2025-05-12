@@ -3,8 +3,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
 const BlacklistToken = require('../models/blacklistToken.model');
-const auth = require('../middlewares/auth.middleware');
+const { auth } = require('../middlewares/auth.middleware');
 const userController = require('../controllers/user.controller');
+const passwordResetController = require('../controllers/passwordReset.controller');
 const { body } = require('express-validator');
 const router = express.Router();
 
@@ -87,5 +88,9 @@ router.post('/logout', auth, async (req, res) => {
         res.status(500).json({ message: "Server Error", error: error.message });
     }
 });
+
+// Password Reset Routes
+router.post('/forgot-password', passwordResetController.initiatePasswordReset);
+router.post('/reset-password', passwordResetController.resetPassword);
 
 module.exports = router;

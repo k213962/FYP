@@ -8,11 +8,14 @@ import {
   StyleSheet,
   Image,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from "expo-router";
 import axios, { AxiosError } from "axios";
 import { UserDataContext } from "../context/userContext";
+import { Ionicons } from '@expo/vector-icons';
 
 interface UserData {
   token: string;
@@ -38,6 +41,8 @@ const CaptainSignup = () => {
   const [driverLicense, setDriverLicense] = useState("");
   const [vehiclePlateNo, setVehiclePlateNo] = useState("");
   const [vehicleType, setVehicleType] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const validateForm = () => {
@@ -96,10 +101,8 @@ const CaptainSignup = () => {
     }
   
     try {
-      // Format mobile number to ensure it starts with '03'
+      setIsLoading(true);
       const formattedMobile = mobile.startsWith('03') ? mobile : `03${mobile}`;
-      console.log("Original mobile:", mobile);
-      console.log("Formatted mobile:", formattedMobile);
 
       const signupData = {
         fullname: { firstname: firstName, lastname: lastName },
@@ -112,15 +115,10 @@ const CaptainSignup = () => {
         vehicleType,
       };
 
-      console.log("Sending signup request to:", `${process.env.EXPO_PUBLIC_BASE_URL}/captain/register`);
-      console.log("Request Payload:", JSON.stringify(signupData, null, 2));
-  
       const response = await axios.post(
         `${process.env.EXPO_PUBLIC_BASE_URL}/captain/register`,
         signupData
       );
-  
-      console.log("Response:", response.data);
   
       if (response.status === 201) {
         Alert.alert(
@@ -130,7 +128,7 @@ const CaptainSignup = () => {
             {
               text: "OK",
               onPress: () => {
-        resetForm();
+                resetForm();
                 router.replace("./CaptainLogin");
               }
             }
@@ -142,14 +140,11 @@ const CaptainSignup = () => {
       const axiosError = error as AxiosError<ErrorResponse>;
       
       if (axiosError.response?.data?.message) {
-        console.log("Error response data:", axiosError.response.data);
         const errorMessages = Array.isArray(axiosError.response.data.message) 
           ? axiosError.response.data.message 
           : [axiosError.response.data.message];
 
-        // Format error messages for better readability
         const formattedErrors = errorMessages.map(msg => {
-          // Capitalize first letter and add period if missing
           return msg.charAt(0).toUpperCase() + msg.slice(1) + (msg.endsWith('.') ? '' : '.');
         });
 
@@ -165,6 +160,8 @@ const CaptainSignup = () => {
           [{ text: "OK" }]
         );
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -181,154 +178,286 @@ const CaptainSignup = () => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Image source={require("../../assets/logo.png")} style={styles.logo} />
-      <Text style={styles.label}>Full Name</Text>
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          placeholder="First Name"
-          value={firstName}
-          onChangeText={setFirstName}
-          maxLength={30}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Last Name"
-          value={lastName}
-          onChangeText={setLastName}
-          maxLength={30}
-        />
-      </View>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.keyboardAvoidingView}
+    >
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.contentContainer}>
+          <Image source={require("../../assets/logo.png")} style={styles.logo} />
+          <Text style={styles.title}>Captain Registration</Text>
+          <Text style={styles.subtitle}>Create your emergency service account</Text>
 
-      <Text style={styles.label}>Email Address</Text>
-      <TextInput
-        style={styles.inputFull}
-        placeholder="email@example.com"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-      />
+          <View style={styles.formContainer}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Full Name</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={[styles.input, styles.inputHalf]}
+                  placeholder="First Name"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  maxLength={30}
+                  placeholderTextColor="#666"
+                />
+                <TextInput
+                  style={[styles.input, styles.inputHalf]}
+                  placeholder="Last Name"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  maxLength={30}
+                  placeholderTextColor="#666"
+                />
+              </View>
+            </View>
 
-      <Text style={styles.label}>Password</Text>
-      <TextInput
-        style={styles.inputFull}
-        placeholder="Enter Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="email@example.com"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                placeholderTextColor="#666"
+              />
+            </View>
 
-      <Text style={styles.label}>CNIC</Text>
-      <TextInput
-        style={styles.inputFull}
-        placeholder="Enter CNIC (without dashes)"
-        keyboardType="numeric"
-        value={cnic}
-        onChangeText={setCnic}
-        maxLength={13}
-      />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  placeholder="Enter Password"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholderTextColor="#666"
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={24}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
 
-      <Text style={styles.label}>Mobile Number</Text>
-      <TextInput
-        style={styles.inputFull}
-        placeholder="03XXXXXXXXX"
-        keyboardType="phone-pad"
-        value={mobile}
-        onChangeText={setMobile}
-        maxLength={11}
-      />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>CNIC</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter CNIC (without dashes)"
+                keyboardType="numeric"
+                value={cnic}
+                onChangeText={setCnic}
+                maxLength={13}
+                placeholderTextColor="#666"
+              />
+            </View>
 
-      <Text style={styles.label}>Driver License</Text>
-      <TextInput
-        style={styles.inputFull}
-        placeholder="Enter Driver License"
-        value={driverLicense}
-        onChangeText={setDriverLicense}
-        maxLength={20}
-      />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Mobile Number</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="03XXXXXXXXX"
+                keyboardType="phone-pad"
+                value={mobile}
+                onChangeText={setMobile}
+                maxLength={11}
+                placeholderTextColor="#666"
+              />
+            </View>
 
-      <Text style={styles.label}>Vehicle Plate No</Text>
-      <TextInput
-        style={styles.inputFull}
-        placeholder="Enter Vehicle Plate No"
-        value={vehiclePlateNo}
-        onChangeText={setVehiclePlateNo}
-        maxLength={20}
-      />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Driver License</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Driver License"
+                value={driverLicense}
+                onChangeText={setDriverLicense}
+                maxLength={20}
+                placeholderTextColor="#666"
+              />
+            </View>
 
-      <Text style={styles.label}>Vehicle Type</Text>
-      <Picker
-        selectedValue={vehicleType}
-        style={styles.picker}
-        onValueChange={(itemValue) => setVehicleType(itemValue)}
-      >
-        <Picker.Item label="Select Vehicle Type" value="" />
-        <Picker.Item label="Ambulance" value="ambulance" />
-        <Picker.Item label="Police" value="police" />
-        <Picker.Item label="Fire Brigade" value="fire-brigade" />
-      </Picker>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Vehicle Plate No</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Vehicle Plate No"
+                value={vehiclePlateNo}
+                onChangeText={setVehiclePlateNo}
+                maxLength={20}
+                placeholderTextColor="#666"
+              />
+            </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleSignup}>
-        <Text style={styles.buttonText}>Create Account</Text>
-      </TouchableOpacity>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Vehicle Type</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={vehicleType}
+                  style={styles.picker}
+                  onValueChange={(itemValue) => setVehicleType(itemValue)}
+                >
+                  <Picker.Item label="Select Vehicle Type" value="" />
+                  <Picker.Item label="Ambulance" value="ambulance" />
+                  <Picker.Item label="Police" value="police" />
+                  <Picker.Item label="Fire Brigade" value="fire-brigade" />
+                </Picker>
+              </View>
+            </View>
 
-      <Text style={styles.footerText}>
-        Already have an account?{" "}
-        <Text style={styles.linkText} onPress={() => router.push("./UserLogin")}>
-          Login here
-        </Text>
-      </Text>
-    </ScrollView>
+            <TouchableOpacity
+              style={[styles.button, isLoading && styles.buttonDisabled]}
+              onPress={handleSignup}
+              disabled={isLoading}
+            >
+              <Text style={styles.buttonText}>
+                {isLoading ? "Creating Account..." : "Create Account"}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.footerContainer}>
+              <Text style={styles.footerText}>
+                Already have an account?{" "}
+                <Text
+                  style={styles.linkText}
+                  onPress={() => router.push("./CaptainLogin")}
+                >
+                  Login here
+                </Text>
+              </Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    padding: 20,
-    justifyContent: "center",
-    backgroundColor: "#f9f9f9",
-  },
-  logo: { width: 150, height: 150, alignSelf: "center", marginBottom: 20 },
-  label: { fontSize: 18, fontWeight: "bold", marginBottom: 5 },
-  inputRow: { flexDirection: "row", gap: 10, marginBottom: 15 },
-  input: {
+  keyboardAvoidingView: {
     flex: 1,
     backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ccc",
   },
-  inputFull: {
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 8,
+  container: {
+    flexGrow: 1,
+  },
+  contentContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    resizeMode: "contain",
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#1a1a1a",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 30,
+    textAlign: "center",
+  },
+  formContainer: {
+    width: "100%",
+    maxWidth: 500,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  inputRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: "#f8f8f8",
+    padding: 15,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ccc",
-    marginBottom: 15,
+    borderColor: "#ddd",
+    fontSize: 16,
+  },
+  inputHalf: {
+    flex: 1,
+  },
+  passwordContainer: {
+    position: "relative",
+  },
+  passwordInput: {
+    paddingRight: 50,
+  },
+  eyeIcon: {
+    position: "absolute",
+    right: 15,
+    top: 15,
+  },
+  pickerContainer: {
+    backgroundColor: "#f8f8f8",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    overflow: "hidden",
   },
   picker: {
     height: 50,
     width: "100%",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    marginBottom: 15,
   },
   button: {
-    backgroundColor: "#111",
-    padding: 15,
-    borderRadius: 8,
+    backgroundColor: "#000",
+    padding: 16,
+    borderRadius: 10,
     alignItems: "center",
     marginTop: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  buttonText: { color: "white", fontSize: 16, fontWeight: "bold" },
-  footerText: { textAlign: "center", marginTop: 10 },
-  linkText: { color: "blue", fontWeight: "bold" },
+  buttonDisabled: {
+    backgroundColor: "#ccc",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  footerContainer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  linkText: {
+    color: "#007AFF",
+    fontWeight: "600",
+  },
 });
 
 export default CaptainSignup;

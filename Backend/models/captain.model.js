@@ -34,6 +34,14 @@ const captainSchema = new mongoose.Schema({
     type: String, 
     enum: ['Online', 'Offline'],
     default: 'Offline'
+  },
+  resetOTP: {
+    type: String,
+    default: null
+  },
+  resetOTPExpiry: {
+    type: Date,
+    default: null
   }
 }, { 
   timestamps: true

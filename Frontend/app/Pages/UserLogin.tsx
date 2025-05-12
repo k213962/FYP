@@ -166,21 +166,20 @@ const UserLogin = () => {
             </View>
 
             <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={handleForgotPassword}
-              disabled={isLoading}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.button, isLoading && styles.buttonDisabled]} 
+              style={styles.button}
               onPress={handleLogin}
               disabled={isLoading}
             >
               <Text style={styles.buttonText}>
-                {isLoading ? "Signing In..." : "Sign In"}
+                {isLoading ? 'Logging in...' : 'Login'}
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.forgotPasswordButton}
+              onPress={() => router.push('./ResetPassword')}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
 
             <View style={styles.divider}>
@@ -189,12 +188,13 @@ const UserLogin = () => {
               <View style={styles.dividerLine} />
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.signupButton}
-              onPress={() => router.push("./UserSignup")}
-              disabled={isLoading}
+              onPress={() => router.push('./UserSignup')}
             >
-              <Text style={styles.signupButtonText}>Create New Account</Text>
+              <Text style={styles.signupButtonText}>
+                Don't have an account? Sign up
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -279,15 +279,6 @@ const styles = StyleSheet.create({
     right: 15,
     top: 15,
   },
-  forgotPassword: {
-    alignSelf: "flex-end",
-    marginBottom: 20,
-  },
-  forgotPasswordText: {
-    color: "#007AFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
   button: {
     backgroundColor: "#007AFF",
     padding: 16,
@@ -350,6 +341,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  forgotPasswordButton: {
+    marginTop: 15,
+    padding: 10,
+    alignItems: 'center',
+  },
+  forgotPasswordText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

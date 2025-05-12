@@ -1,7 +1,8 @@
 const express = require('express');
 const { body } = require('express-validator');
-const auth = require('../middlewares/auth.middleware');
+const { auth } = require('../middlewares/auth.middleware');
 const CaptainController = require('../controllers/captain.controller');
+const PasswordResetController = require('../controllers/passwordReset.controller');
 
 const router = express.Router();
 
@@ -64,7 +65,7 @@ router.post('/login', CaptainController.loginCaptain);
 router.post('/logout', auth, CaptainController.logoutCaptain);
 
 // GET PROFILE
-router.get('/profile', auth, CaptainController.getProfile);
+router.get('/profile', auth, CaptainController.getCaptainProfile);
 
 // Update Captain Status
 router.patch('/status', auth, CaptainController.updateStatus);
@@ -74,5 +75,11 @@ router.patch('/stats', auth, CaptainController.updateStats);
 
 // Update location
 router.post('/location', auth, CaptainController.updateLocation);
+
+// Forgot Password
+router.post('/forgot-password', PasswordResetController.initiatePasswordReset);
+
+// Reset Password
+router.post('/reset-password', PasswordResetController.resetPassword);
 
 module.exports = router; 

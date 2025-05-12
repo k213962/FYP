@@ -114,7 +114,7 @@ const Home = () => {
       };
 
       // Calculate estimated arrival time (15 minutes from now)
-      const estimatedArrivalTime = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      const estimatedArrivalTime = new Date(Date.now() + 15 * 60 * 1000);
 
       // Convert vehicle type to match backend enum
       let serviceType = vehicle.toLowerCase();
