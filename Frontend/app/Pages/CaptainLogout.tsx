@@ -9,7 +9,7 @@ export default function CaptainLogout() {
 
   useEffect(() => {
     const logout = async () => {
-      const token = await AsyncStorage.getItem("captain-token");
+      const token = await AsyncStorage.getItem("token");
 
       if (!token) {
         router.replace("./CaptainLogin");
@@ -28,7 +28,7 @@ export default function CaptainLogout() {
         );
 
         if (response.status === 200) {
-          await AsyncStorage.removeItem("captain-token");
+          await AsyncStorage.removeItem("token");
           router.replace("./CaptainLogin");
         }
       } catch (error) {

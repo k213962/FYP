@@ -37,14 +37,30 @@ export default function CaptainLogin() {
         return;
       }
 
+      console.log('Attempting login with email:', email);
       const response = await axios.post(
         `${baseUrl}/captain/login`,
         { email, password }
       );
 
+      console.log('Login response received:', response.status);
+      
       if (response.status === 200 && response.data.token) {
+        console.log('Token received, storing in AsyncStorage...');
         await AsyncStorage.setItem("token", response.data.token);
-        router.replace("/Pages/CaptainHome");
+        
+        // Verify token was stored
+        const storedToken = await AsyncStorage.getItem("token");
+        if (storedToken) {
+          console.log('Token successfully stored in AsyncStorage');
+          router.replace("/Pages/CaptainHome");
+        } else {
+          console.error('Failed to store token in AsyncStorage');
+          Alert.alert("Error", "Failed to store authentication token");
+        }
+      } else {
+        console.error('Invalid response format:', response.data);
+        Alert.alert("Login Failed", "Invalid response from server");
       }
     } catch (error: any) {
       console.error("Login error:", error.response?.data || error.message);

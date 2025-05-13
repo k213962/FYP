@@ -82,4 +82,7 @@ router.post('/forgot-password', PasswordResetController.initiatePasswordReset);
 // Reset Password
 router.post('/reset-password', PasswordResetController.resetPassword);
 
+// Location update routes
+router.get('/location', auth, CaptainController.getLocation);
+
 module.exports = router; 

@@ -6,69 +6,80 @@ const BlacklistToken = require("../models/blacklistToken.model");
 
 // Register User
 exports.registerUser = async (req, res) => {
-    console.log("Registering user..."); // Debugging
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        console.log("Validation Errors:", errors.array()); // Debugging
         return res.status(400).json({ errors: errors.array() });
     }
 
     const { fullname, email, password, cnic, mobile } = req.body;
-    console.log("Request Body:", req.body); // Debugging
+
     try {
-        console.log("Checking if user already exists..."); // Debugging
-        let user = await User.findOne({ email });
-        if (user) {
-            console.log("User with this email already exists."); // Debugging
-            return res.status(400).json({ message: "User already exists" });
+        // Check for existing user using static methods
+        const existingUser = await User.findOne({
+            $or: [
+                { email: email.toLowerCase() },
+                { cnic },
+                { mobile }
+            ]
+        });
+
+        if (existingUser) {
+            if (existingUser.email === email.toLowerCase()) {
+                return res.status(400).json({ message: "Email already registered" });
+            }
+            if (existingUser.cnic === cnic) {
+                return res.status(400).json({ message: "CNIC already registered" });
+            }
+            if (existingUser.mobile === mobile) {
+                return res.status(400).json({ message: "Mobile number already registered" });
+            }
         }
 
-        user = await User.findOne({ cnic });
-        if (user) {
-            console.log("User with this CNIC already exists."); // Debugging
-            return res.status(400).json({ message: "CNIC already exists" });
-        }
-
-        user = await User.findOne({ mobile });
-        if (user) {
-            console.log("User with this mobile number already exists."); // Debugging
-            return res.status(400).json({ message: "Mobile number already exists" });
-        }
-
-        console.log("Hashing password..."); // Debugging
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        console.log("Creating new user..."); // Debugging
-        user = new User({
+        // Create new user
+        const user = new User({
             fullname: {
                 firstname: fullname.firstname,
                 lastname: fullname.lastname
             },
-            email,
-            password: hashedPassword,
+            email: email.toLowerCase(),
+            password,
             cnic,
             mobile
         });
 
-        // Save the user to the database
         await user.save();
-        console.log("User saved to the database."); // Debugging
 
-        // Generate a token
-        console.log("Generating token..."); // Debugging
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
-        console.log("Generated Token:", token); // Debugging
+        // Generate token with more secure options
+        const token = jwt.sign(
+            { 
+                id: user._id,
+                email: user.email
+            }, 
+            process.env.JWT_SECRET, 
+            { 
+                expiresIn: "1h",
+                algorithm: "HS256"
+            }
+        );
 
-        // Include the token in the response
         res.status(201).json({
             message: "User registered successfully",
-            token: token // Ensure the token is explicitly included
+            token,
+            user: {
+                id: user._id,
+                fullname: user.fullname,
+                email: user.email
+            }
         });
 
     } catch (err) {
-        console.error("Error:", err.message); // Debugging
-        res.status(500).json({ message: "Server Error", error: err.message });
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({ 
+                message: "Validation Error", 
+                errors: Object.values(err.errors).map(e => e.message)
+            });
+        }
+        res.status(500).json({ message: "Server Error" });
     }
 };
 
@@ -77,52 +88,149 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ message: "Invalid Credentials" });
+        // Log request details (excluding password)
+        console.log('Login attempt:', { email, passwordLength: password?.length });
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
+        // Validate JWT secret
+        if (!process.env.JWT_SECRET) {
+            console.error('JWT_SECRET is not configured');
+            throw new Error('JWT_SECRET is not configured');
+        }
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+        // Find user and explicitly select password field
+        const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+        if (!user) {
+            console.log('User not found:', email);
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
 
-        // Send both token and user data (excluding password)
+        // Check if account is locked
+        if (user.lockUntil && user.lockUntil > Date.now()) {
+            console.log('Account locked:', email);
+            return res.status(403).json({ 
+                message: "Account is locked. Try again later.",
+                lockUntil: user.lockUntil
+            });
+        }
+
+        // Compare password with better error handling
+        let isMatch;
+        try {
+            isMatch = await user.comparePassword(password);
+            console.log('Password comparison result:', isMatch);
+        } catch (error) {
+            console.error('Password comparison error:', error);
+            return res.status(500).json({ 
+                message: "Error during password verification",
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+
+        if (!isMatch) {
+            console.log('Invalid password for user:', email);
+            // Increment failed login attempts
+            await user.incrementLoginAttempts();
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
+
+        // Reset login attempts on successful login
+        await user.resetLoginAttempts();
+        user.lastLogin = new Date();
+        await user.save();
+
+        // Generate token with error handling
+        let token;
+        try {
+            token = jwt.sign(
+                { 
+                    id: user._id,
+                    email: user.email
+                }, 
+                process.env.JWT_SECRET, 
+                { 
+                    expiresIn: "1h",
+                    algorithm: "HS256"
+                }
+            );
+            console.log('Token generated successfully for user:', email);
+        } catch (error) {
+            console.error('Token generation error:', error);
+            return res.status(500).json({ 
+                message: "Error generating authentication token",
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+
         const userData = {
             _id: user._id,
             fullname: user.fullname,
             email: user.email,
             cnic: user.cnic,
-            mobile: user.mobile
+            mobile: user.mobile,
+            lastLogin: user.lastLogin
         };
 
-        res.json({ token, user: userData });
+        console.log('Login successful for user:', email);
+        res.json({ 
+            token, 
+            user: userData,
+            expiresIn: 3600 // Token expiration in seconds
+        });
 
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        console.error('Login error:', {
+            message: err.message,
+            stack: err.stack,
+            email: email
+        });
+        res.status(500).json({ 
+            message: "Server Error",
+            error: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
     }
 };
 
 // Logout User
 exports.logoutUser = async (req, res) => {
     try {
-        const token = req.header("Authorization").split(" ")[1];
-        await BlacklistToken.create({ token });
+        const token = req.header("Authorization")?.split(" ")[1];
+        if (!token) {
+            return res.status(400).json({ message: "No token provided" });
+        }
+
+        // Add token to blacklist with expiration
+        await BlacklistToken.create({ 
+            token,
+            expiresAt: new Date(Date.now() + 3600000) // 1 hour from now
+        });
 
         res.json({ message: "Logged out successfully" });
 
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        res.status(500).json({ message: "Server Error" });
     }
 };
 
 // Get Profile
 exports.getProfile = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).select("-password");
-        if (!user) return res.status(404).json({ message: "User not found" });
+        const user = await User.findById(req.user.id)
+            .select("-password -resetOTP -resetOTPExpiry");
+            
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
 
-        res.json(user);
+        if (!user.isActive) {
+            return res.status(403).json({ message: "Account is deactivated" });
+        }
+
+        res.json({
+            user,
+            lastLogin: user.lastLogin
+        });
 
     } catch (err) {
-        res.status(500).json({ message: "Server Error", error: err.message });
+        res.status(500).json({ message: "Server Error" });
     }
 };

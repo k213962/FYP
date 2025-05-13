@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const { validationResult } = require("express-validator");
 const Captain = require("../models/captain.model");
 const BlacklistToken = require("../models/blacklistToken.model");
+const captainService = require('../services/captain.service');
+const socketIO = require('../socket');
 
 // Register Captain
 exports.registerCaptain = async (req, res) => {
@@ -63,7 +65,7 @@ exports.registerCaptain = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Create new captain
+        // Create new captain with default location
         const captain = new Captain({
             fullname,
             email,
@@ -72,7 +74,13 @@ exports.registerCaptain = async (req, res) => {
             phone: formattedPhone,
             driverLicense,
             vehicleNoPlate: vehiclePlateNo,
-            vehicleType: vehicleType.toLowerCase()
+            vehicleType: vehicleType.toLowerCase(),
+            status: 'Offline',
+            location: {
+                type: 'Point',
+                coordinates: [0, 0],
+                lastUpdated: new Date()
+            }
         });
 
         console.log("Attempting to save new captain:", {
@@ -117,17 +125,80 @@ exports.loginCaptain = async (req, res) => {
         const isMatch = await bcrypt.compare(password, captain.password);
         if (!isMatch) return res.status(400).json({ message: "Invalid Credentials" });
 
-        // Set status to Offline on login
-        captain.status = 'Offline';
-        await captain.save();
-
         const token = jwt.sign({ id: captain._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
-        res.json({ token });
+        res.json({ 
+            token,
+            captain: {
+                id: captain._id,
+                fullname: captain.fullname,
+                email: captain.email,
+                status: captain.status
+            }
+        });
 
     } catch (err) {
         console.error("Error during login:", err.message);
         res.status(500).json({ message: "Server Error", error: err.message });
+    }
+};
+
+// Update Captain Status
+exports.updateStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        const captainId = req.user.id;
+
+        const captain = await captainService.updateCaptainStatus(captainId, status);
+
+        res.status(200).json({
+            message: "Status updated successfully",
+            captain: {
+                id: captain._id,
+                status: captain.status
+            }
+        });
+
+    } catch (error) {
+        console.error("Error updating status:", error.message);
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// Update Captain Location
+exports.updateLocation = async (req, res) => {
+    try {
+        const captainId = req.user.id;
+        const { location } = req.body;
+
+        const updatedCaptain = await captainService.updateCaptainLocation(captainId, location);
+
+        // Emit location update to connected clients
+        const io = socketIO.getIO();
+        io.emit(`captain_${captainId}_location`, {
+            captainId,
+            location: updatedCaptain.location
+        });
+
+        return res.status(200).json({
+            message: 'Location updated successfully',
+            location: updatedCaptain.location
+        });
+    } catch (error) {
+        console.error('Error updating location:', error.message);
+        return res.status(400).json({ error: error.message });
+    }
+};
+
+// Get Captain Location
+exports.getLocation = async (req, res) => {
+    try {
+        const captainId = req.user.id;
+        const location = await captainService.getCaptainLocation(captainId);
+        return res.status(200).json({ location });
+    } catch (error) {
+        console.error('Error getting location:', error.message);
+        return res.status(400).json({ error: error.message });
     }
 };
 
@@ -179,30 +250,6 @@ exports.getProfile = async (req, res) => {
     }
 };
 
-// Update Captain Status
-exports.updateStatus = async (req, res) => {
-    try {
-        const { status } = req.body;
-        if (!['Online', 'Offline'].includes(status)) {
-            return res.status(400).json({ message: "Invalid status" });
-        }
-
-        const captain = await Captain.findByIdAndUpdate(
-            req.user.id,
-            { status },
-            { new: true }
-        ).select('-password');
-
-        if (!captain) {
-            return res.status(404).json({ message: "Captain not found" });
-        }
-
-        res.status(200).json(captain);
-    } catch (error) {
-        res.status(500).json({ message: "Server Error", error: error.message });
-    }
-};
-
 // Update Captain Stats
 exports.updateStats = async (req, res) => {
     try {
@@ -227,34 +274,75 @@ exports.updateStats = async (req, res) => {
     }
 };
 
-// Update Captain Location
-exports.updateLocation = async (req, res) => {
+// Start Location Tracking
+exports.startLocationTracking = async (req, res) => {
     try {
-        const { latitude, longitude } = req.body;
         const captainId = req.user.id;
+        const { location } = req.body;
 
-        if (!latitude || !longitude) {
-            return res.status(400).json({ message: "Latitude and longitude are required" });
-        }
+        const result = await captainService.startLocationTracking(captainId, location);
 
-        const captain = await Captain.findByIdAndUpdate(
+        // Emit tracking started event
+        const io = socketIO.getIO();
+        io.emit(`captain_${captainId}_tracking_started`, {
             captainId,
-            {
-                location: {
-                    type: 'Point',
-                    coordinates: [longitude, latitude]
-                }
-            },
-            { new: true }
-        );
+            timestamp: new Date()
+        });
 
-        if (!captain) {
-            return res.status(404).json({ message: "Captain not found" });
-        }
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error('Error starting location tracking:', error.message);
+        return res.status(400).json({ error: error.message });
+    }
+};
 
-        res.json({ message: "Location updated successfully", captain });
-    } catch (err) {
-        console.error("Error updating location:", err.message);
-        res.status(500).json({ message: "Server Error", error: err.message });
+// Get Online Captains
+exports.getOnlineCaptains = async (req, res) => {
+    try {
+        const onlineCaptains = await captainService.getOnlineCaptains();
+        return res.status(200).json({ captains: onlineCaptains });
+    } catch (error) {
+        console.error('Error getting online captains:', error.message);
+        return res.status(500).json({ error: error.message });
+    }
+};
+
+// Validate All Captain Locations
+exports.validateAllLocations = async (req, res) => {
+    try {
+        const results = await captainService.validateAllCaptainLocations();
+        
+        // Log the results
+        console.log('Location validation results:', {
+            total: results.total,
+            valid: results.valid,
+            fixed: results.fixed,
+            invalid: results.invalid
+        });
+
+        // Log details of fixed and invalid locations
+        results.details.forEach(detail => {
+            if (detail.status !== 'valid') {
+                console.log('Location issue:', {
+                    captainId: detail.captainId,
+                    email: detail.email,
+                    status: detail.status,
+                    message: detail.message,
+                    originalLocation: detail.originalLocation,
+                    fixedCoordinates: detail.fixedCoordinates
+                });
+            }
+        });
+
+        res.status(200).json({
+            message: 'Location validation completed',
+            results
+        });
+    } catch (error) {
+        console.error('Error validating locations:', error);
+        res.status(500).json({ 
+            message: 'Error validating locations',
+            error: error.message 
+        });
     }
 };

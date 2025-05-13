@@ -24,7 +24,6 @@ export const getLoggedInCaptain = async (): Promise<CaptainData | null> => {
       return null;
     }
 
-    console.log('Making request to:', `${process.env.EXPO_PUBLIC_BASE_URL}/captain/profile`);
     const response = await axios.get(
       `${process.env.EXPO_PUBLIC_BASE_URL}/captain/profile`,
       {
@@ -35,7 +34,6 @@ export const getLoggedInCaptain = async (): Promise<CaptainData | null> => {
     );
 
     if (response.status === 200 && response.data) {
-      console.log('Raw response data:', response.data);
       const data = response.data;
       
       // Transform the data to match our interface
@@ -51,7 +49,6 @@ export const getLoggedInCaptain = async (): Promise<CaptainData | null> => {
         status: data.status || 'Offline'
       };
       
-      console.log('Transformed data:', transformedData);
       return transformedData;
     }
     

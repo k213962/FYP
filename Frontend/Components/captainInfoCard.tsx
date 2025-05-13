@@ -118,8 +118,6 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
     );
   }
 
-  console.log('Rendering with captain data:', captainData);
-
   return (
     <View style={styles.detailsCard}>
       <View style={styles.rowBetween}>

@@ -20,19 +20,29 @@ const captainSchema = new mongoose.Schema({
     type: {
       type: String,
       enum: ['Point'],
-      default: 'Point',
-      required: true
+      default: 'Point'
     },
     coordinates: {
       type: [Number],
-      default: [0, 0],
-      required: true
+      validate: {
+        validator: function(v) {
+          return v.length === 2 && 
+                 v[0] >= -180 && v[0] <= 180 && // longitude
+                 v[1] >= -90 && v[1] <= 90;     // latitude
+        },
+        message: 'Coordinates must be [longitude, latitude] with valid ranges'
+      },
+      default: [74.3587, 31.5204] // Default to Lahore coordinates
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
     }
   },
   hoursOnline: { type: Number, default: 0 },
   status: { 
     type: String, 
-    enum: ['Online', 'Offline'],
+    enum: ['Online', 'Offline', 'Busy'],
     default: 'Offline'
   },
   resetOTP: {
@@ -42,6 +52,10 @@ const captainSchema = new mongoose.Schema({
   resetOTPExpiry: {
     type: Date,
     default: null
+  },
+  currentEmergency: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Ride'
   }
 }, { 
   timestamps: true
