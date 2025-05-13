@@ -39,6 +39,12 @@ const UserLogin = () => {
         return;
       }
 
+      console.log('Login attempt details:', {
+        email,
+        passwordLength: password.length,
+        baseUrl
+      });
+
       const response = await axios.post(
         `${baseUrl}/user/login`,
         {
@@ -47,23 +53,39 @@ const UserLogin = () => {
         }
       );
 
+      console.log('Login response:', {
+        status: response.status,
+        hasToken: !!response.data.token,
+        hasUserData: !!response.data.userData,
+        message: response.data.message
+      });
+
       if (response.status === 200 && response.data.token) {
         // Save token
         await AsyncStorage.setItem("token", response.data.token);
+        console.log('Token saved successfully');
         
         // Save user data if available
         if (response.data.userData) {
           await AsyncStorage.setItem("userData", JSON.stringify(response.data.userData));
           setUser(response.data.userData);
+          console.log('User data saved successfully');
         }
 
         // Navigate to NavOptions
         router.replace("/Pages/NavOptions");
       } else {
+        console.log('Invalid response:', response.data);
         Alert.alert("Authentication Error", "Invalid response from server");
       }
     } catch (error: any) {
-      console.error("Login error:", error.response?.data || error.message);
+      console.error("Login error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        headers: error.response?.headers,
+        data: error.response?.data
+      });
       const errorMessage = error.response?.data?.message || "Invalid credentials";
       Alert.alert("Authentication Failed", errorMessage);
     } finally {

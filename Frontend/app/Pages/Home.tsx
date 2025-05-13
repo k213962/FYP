@@ -110,11 +110,9 @@ const Home = () => {
       // Format the emergency location data
       const emergencyLocation = {
         type: 'Point',
-        coordinates: [fixedRegion.longitude, fixedRegion.latitude]
+        coordinates: [fixedRegion.longitude, fixedRegion.latitude],
+        address: location
       };
-
-      // Calculate estimated arrival time (15 minutes from now)
-      const estimatedArrivalTime = new Date(Date.now() + 15 * 60 * 1000);
 
       // Convert vehicle type to match backend enum
       let serviceType = vehicle.toLowerCase();
@@ -123,12 +121,11 @@ const Home = () => {
       }
 
       // Log the request data for debugging
-      console.log('Creating ride with data:', {
+      console.log('Creating emergency request with data:', {
         emergencyLocation,
         serviceType,
         emergencyType: "Emergency",
-        description: `Emergency request at ${location}`,
-        estimatedArrivalTime
+        description: `Emergency request at ${location}`
       });
 
       const response = await axios.post(
@@ -137,8 +134,7 @@ const Home = () => {
           emergencyLocation,
           serviceType,
           emergencyType: "Emergency",
-          description: `Emergency request at ${location}`,
-          estimatedArrivalTime
+          description: `Emergency request at ${location}`
         },
         {
           headers: {

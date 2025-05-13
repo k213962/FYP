@@ -17,7 +17,9 @@ const userSchema = new mongoose.Schema({
     password: {
         type: String,
         required: true,
-        minlength: [6, 'Password must be at least 6 characters long']
+        minlength: [8, 'Password must be at least 8 characters long'],
+        match: [/^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])[A-Za-z0-9!@#$%^&*]{8,}$/, 
+            'Password must contain at least one uppercase letter, one number, and one special character']
     },
     cnic: {
         type: String,
@@ -68,8 +70,16 @@ userSchema.pre('save', async function(next) {
 // Method to compare password
 userSchema.methods.comparePassword = async function(candidatePassword) {
     try {
-        return await bcrypt.compare(candidatePassword, this.password);
+        console.log('Comparing passwords:');
+        console.log('Candidate password length:', candidatePassword.length);
+        console.log('Stored hash length:', this.password.length);
+        
+        const isMatch = await bcrypt.compare(candidatePassword, this.password);
+        console.log('bcrypt.compare result:', isMatch);
+        
+        return isMatch;
     } catch (error) {
+        console.error('Password comparison error:', error);
         throw error;
     }
 };

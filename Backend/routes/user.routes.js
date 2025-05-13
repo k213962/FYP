@@ -49,17 +49,59 @@ router.post('/register', [
 router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+        console.log('Login attempt for email:', email);
+        console.log('Password received:', password ? 'Password provided' : 'No password provided');
+        console.log('Password length:', password ? password.length : 0);
+
+        // Check if email and password are provided
+        if (!email || !password) {
+            console.log('Missing credentials:', { email: !!email, password: !!password });
+            return res.status(400).json({ message: "Email and password are required" });
+        }
 
         const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ message: "Invalid credentials" });
+        console.log('User found:', user ? 'Yes' : 'No');
+        
+        if (!user) {
+            console.log('User not found for email:', email);
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+        console.log('Stored password hash:', user.password);
+        console.log('Attempting password comparison...');
+        const isMatch = await user.comparePassword(password);
+        console.log('Password match result:', isMatch);
+        console.log('Password comparison details:', {
+            providedPasswordLength: password.length,
+            storedHashLength: user.password.length,
+            isMatch: isMatch
+        });
+
+        if (!isMatch) {
+            console.log('Password mismatch for user:', email);
+            return res.status(400).json({ message: "Invalid credentials" });
+        }
 
         const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+        console.log('Token generated successfully');
 
-        res.status(200).json({ message: "Login successful", token });
+        // Get user data without password
+        const userData = await User.findById(user._id).select('-password');
+        console.log('User data retrieved successfully');
+
+        console.log('Login successful for user:', email);
+        res.status(200).json({ 
+            message: "Login successful", 
+            token,
+            userData 
+        });
     } catch (error) {
+        console.error("Login error details:", {
+            message: error.message,
+            stack: error.stack,
+            name: error.name,
+            response: error.response?.data
+        });
         res.status(500).json({ message: "Server Error", error: error.message });
     }
 });

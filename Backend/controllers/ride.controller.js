@@ -21,32 +21,79 @@ const RideController = {
                 description
             });
 
-            // Find nearby drivers
-            const nearbyDrivers = await rideService.findNearbyDrivers(emergencyLocation, serviceType);
+            // Return response immediately after creating the request
+            res.status(201).json({ 
+                message: 'Emergency request created successfully', 
+                ride
+            });
 
-            // Notify nearby drivers and add them to a room for this ride
+            // Handle driver search and notification asynchronously
+            try {
+                // Find nearby drivers
+                const nearbyDrivers = await rideService.findNearbyDrivers(
+                    ride.emergencyLocation,
+                    ride.serviceType
+                );
+
+                // Notify nearby drivers about the emergency
+                const io = socketIO.getIO();
+                nearbyDrivers.forEach(driver => {
+                    io.to(driver._id.toString()).emit('newEmergencyRequest', {
+                        rideId: ride._id,
+                        emergencyLocation: ride.emergencyLocation,
+                        serviceType: ride.serviceType,
+                        emergencyType: ride.emergencyType,
+                        description: ride.description
+                    });
+                });
+
+                // Log the number of drivers notified
+                console.log(`Notified ${nearbyDrivers.length} nearby drivers for emergency request ${ride._id}`);
+            } catch (error) {
+                console.error('Error in driver search and notification process:', error);
+                // Don't throw the error as the request was already created successfully
+            }
+
+        } catch (error) {
+            console.error('Error creating emergency request:', error.message);
+            return res.status(500).json({ error: error.message || 'Internal server error' });
+        }
+    },
+
+    findNearbyDrivers: async (req, res) => {
+        try {
+            const { rideId } = req.params;
+            const ride = await rideService.getRideById(rideId);
+            
+            if (!ride) {
+                return res.status(404).json({ error: 'Emergency request not found' });
+            }
+
+            const nearbyDrivers = await rideService.findNearbyDrivers(
+                ride.emergencyLocation,
+                ride.serviceType
+            );
+
+            // Notify nearby drivers
             const io = socketIO.getIO();
             nearbyDrivers.forEach(driver => {
                 io.to(driver._id.toString()).emit('newEmergencyRequest', {
                     rideId: ride._id,
-                    emergencyLocation,
-                    serviceType,
-                    emergencyType,
-                    description
+                    emergencyLocation: ride.emergencyLocation,
+                    serviceType: ride.serviceType,
+                    emergencyType: ride.emergencyType,
+                    description: ride.description
                 });
-
-                // Optional: you can have drivers join the ride room on client-side
-                // socket.join(`ride_${ride._id}`);
             });
 
-            return res.status(201).json({ 
-                message: 'Emergency request created successfully', 
-                ride,
-                nearbyDrivers: nearbyDrivers.length
+            return res.status(200).json({
+                message: 'Nearby drivers found',
+                nearbyDrivers: nearbyDrivers.length,
+                drivers: nearbyDrivers
             });
 
         } catch (error) {
-            console.error('Error creating emergency request:', error.message);
+            console.error('Error finding nearby drivers:', error.message);
             return res.status(500).json({ error: error.message || 'Internal server error' });
         }
     },
@@ -59,7 +106,7 @@ const RideController = {
             const ride = await rideService.acceptRide(rideId, captainId);
 
             if (!ride) {
-                return res.status(404).json({ error: 'Ride not found or already accepted' });
+                return res.status(404).json({ error: 'Emergency request not found or already accepted' });
             }
 
             // Notify all drivers in the ride room that it was accepted
@@ -88,16 +135,16 @@ const RideController = {
             const ride = await rideService.startRide(rideId, captainId);
 
             if (!ride) {
-                return res.status(404).json({ error: 'Ride not found or not accepted yet' });
+                return res.status(404).json({ error: 'Emergency request not found or not accepted yet' });
             }
 
             return res.status(200).json({
-                message: 'Ride started successfully',
+                message: 'Emergency response started successfully',
                 ride
             });
 
         } catch (error) {
-            console.error('Error starting ride:', error.message);
+            console.error('Error starting emergency response:', error.message);
             return res.status(400).json({ error: error.message });
         }
     }

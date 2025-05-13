@@ -1,9 +1,22 @@
 import React, { createContext, useState } from "react";
 
-export const UserDataContext = createContext();
+interface User {
+  email: string;
+  fullName: {
+    firstName: string;
+    lastName: string;
+  };
+}
 
-const UserContext = ({ children }) => {
-  const [user, setUser] = useState({
+interface UserContextType {
+  user: User;
+  setUser: React.Dispatch<React.SetStateAction<User>>;
+}
+
+export const UserDataContext = createContext<UserContextType | undefined>(undefined);
+
+const UserContext: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User>({
     email: "",
     fullName: {
       firstName: "",

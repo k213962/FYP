@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, AppState } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, AppState } from 'react-native';
 import { getLoggedInCaptain } from '../app/utils/captainUtils';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -124,12 +124,6 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
     <View style={styles.detailsCard}>
       <View style={styles.rowBetween}>
         <View style={styles.row}>
-          <Image
-            style={styles.avatar}
-            source={{
-              uri: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?fm=jpg&q=60&w=3000',
-            }}
-          />
           <Text style={styles.name}>
             {captainData?.fullname ? `${captainData.fullname.firstname} ${captainData.fullname.lastname}` : 'Captain'}
           </Text>
@@ -188,12 +182,6 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
   },
   name: {
     fontSize: 18,

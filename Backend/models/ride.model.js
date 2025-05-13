@@ -19,6 +19,10 @@ const rideSchema = new mongoose.Schema({
         coordinates: {
             type: [Number],
             required: true
+        },
+        address: {
+            type: String,
+            required: true
         }
     },
     serviceType: {
@@ -26,39 +30,23 @@ const rideSchema = new mongoose.Schema({
         required: true,
         enum: ['ambulance', 'fire', 'police']
     },
-    emergencyType: {
-        type: String,
-        required: true
-    },
-    description: {
-        type: String,
-        required: true
-    },
     status: {
         type: String,
-        enum: ['pending', 'accepted', 'ride-started', 'completed', 'cancelled'],
+        enum: ['pending', 'accepted', 'in-progress', 'completed', 'cancelled'],
         default: 'pending'
-    },
-    acceptedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Captain'
-    },
-    estimatedArrivalTime: {
-        type: Date
-    },
-    actualArrivalTime: {
-        type: Date
     },
     completionTime: {
         type: Date
     }
-}, { timestamps: true });
+}, { 
+    timestamps: true 
+});
 
 // Create geospatial index for emergency location
 rideSchema.index({ emergencyLocation: '2dsphere' });
 
 // Force index creation
-const Ride = mongoose.model('ride', rideSchema);
+const Ride = mongoose.model('Ride', rideSchema);
 Ride.init()
     .then(() => console.log('Ride indexes built successfully.'))
     .catch(err => console.error('Error building indexes:', err));
