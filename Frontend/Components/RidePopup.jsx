@@ -1,68 +1,51 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Linking } from 'react-native';
 import { useRouter } from "expo-router";
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const EmergencyPopup = ({ onClose, emergencyData }) => {
-  // Log when component renders for debugging
-  console.log('[POPUP] RidePopup rendering with data:', JSON.stringify(emergencyData));
-
-  // ✅ Prevent component from rendering if no data
-  if (!emergencyData) {
-    console.log('[POPUP] No emergency data, not rendering popup');
-    return null;
-  }
-
-  // Add extra validation to ensure we have the core needed fields
-  const isValidData = emergencyData.rideId && emergencyData.timeoutSeconds;
-  if (!isValidData) {
-    console.error('[POPUP] Invalid emergency data:', JSON.stringify(emergencyData));
-    Alert.alert('Debug', 'Received invalid ride data');
-    return null;
-  }
-
+const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => {
+  const [rideStatus, setRideStatus] = useState(emergencyData?.status || 'pending');
+  const [userData] = useState({
+    name: emergencyData?.userName || 'Emergency User',
+    mobile: emergencyData?.user?.mobile || null,
+    email: emergencyData?.user?.email || null
+  });
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(emergencyData?.timeoutSeconds || 15);
-  const timerRef = useRef(null);
 
+  // Debug log to see the structure
   useEffect(() => {
-    console.log('[POPUP] Setting up timer for ride popup');
+    console.log('[POPUP] Full emergency data:', JSON.stringify(emergencyData, null, 2));
+    console.log('[POPUP] User mobile:', userData.mobile);
+  }, [emergencyData]);
 
-    // Set up countdown timer
-    if (emergencyData?.timeoutSeconds) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prevTime) => {
-          const newTime = prevTime - 1;
-          console.log('[POPUP] Countdown:', newTime);
-          if (newTime <= 0) {
-            clearInterval(timerRef.current);
-            // Auto-close when timer expires
-            console.log('[POPUP] Timer expired, closing popup');
-            onClose();
-            return 0;
-          }
-          return newTime;
-        });
-      }, 1000);
-
-      return () => {
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-        }
-      };
+  const handlePhonePress = () => {
+    const mobileNumber = emergencyData?.user?.mobile || userData.mobile;
+    if (mobileNumber) {
+      Linking.openURL(`tel:${mobileNumber}`);
+    } else {
+      Alert.alert('No Phone Number', 'User phone number is not available.');
     }
-  }, [emergencyData?.timeoutSeconds]); 
+  };
 
-  // Poll for ride status to check if another driver accepted it
+  // Poll for ride status updates
   useEffect(() => {
-    const checkRideStatus = async () => {
+    const pollRideStatus = async () => {
       try {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) return;
+        if (!emergencyData?.rideId) {
+          console.log('[POPUP] No ride ID available for status polling');
+          return;
+        }
 
-        const rideStatusResponse = await axios.get(
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+          console.log('[POPUP] No token available for status polling');
+          return;
+        }
+
+        console.log('[POPUP] Polling ride status updates');
+
+        const response = await axios.get(
           `${process.env.EXPO_PUBLIC_BASE_URL}/rides/status-updates`,
           {
             headers: {
@@ -70,102 +53,113 @@ const EmergencyPopup = ({ onClose, emergencyData }) => {
             }
           }
         );
-        
-        const updates = rideStatusResponse.data.updates || [];
-        
-        // Check if this ride was accepted by another driver
-        const acceptedByOther = updates.find(
-          update => update.type === 'ride_accepted' && 
-                   update.rideId === emergencyData.rideId
-        );
-        
-        if (acceptedByOther) {
-          Alert.alert(
-            'Request Accepted',
-            'Another driver has accepted this emergency request.',
-            [{ text: 'OK', onPress: onClose }]
+
+        console.log('[POPUP] Status updates response:', response.data);
+
+        if (response.data?.updates) {
+          // Find relevant updates for this ride
+          const rideUpdates = response.data.updates.filter(
+            update => update.rideId === emergencyData.rideId
           );
-        }
-      } catch (error) {
-        console.error('[POPUP] Error checking ride status:', error);
-      }
-    };
-    
-    // Check every 5 seconds
-    const statusInterval = setInterval(checkRideStatus, 5000);
-    
-    return () => {
-      clearInterval(statusInterval);
-    };
-  }, [emergencyData.rideId]);
 
-  const handleAccept = async () => {
-    try {
-      setLoading(true);
-      console.log('[POPUP] Accepting ride request for ID:', emergencyData?.rideId);
-      
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert('Error', 'Authentication required');
-        setLoading(false);
-        return;
-      }
-
-      console.log('[POPUP] Sending accept request to server');
-      const response = await axios.post(
-        `${process.env.EXPO_PUBLIC_BASE_URL}/rides/${emergencyData?.rideId}/accept`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
+          if (rideUpdates.length > 0) {
+            // Get the most recent update
+            const latestUpdate = rideUpdates[rideUpdates.length - 1];
+            
+            // Update status based on update type
+            switch (latestUpdate.type) {
+              case 'ride_accepted':
+                setRideStatus('accepted');
+                // Update user data if available in the update
+                if (latestUpdate.userData) {
+                  setUserData({
+                    name: latestUpdate.userData.name || userData.name,
+                    mobile: latestUpdate.userData.mobile || userData.mobile,
+                    email: latestUpdate.userData.email || userData.email
+                  });
+                }
+                break;
+              case 'ride_started':
+                setRideStatus('started');
+                break;
+              case 'no_drivers':
+              case 'no_driver_accepted':
+                setRideStatus('no_driver');
+                onClose(); // Close popup if no drivers available
+                break;
+              default:
+                // Keep existing status
+                break;
+            }
           }
         }
-      );
-
-      console.log('[POPUP] Accept response:', response.status, response.data);
-      if (response.status === 200) {
-        console.log('[POPUP] Successfully accepted ride, navigating to CaptainRiding');
-        router.push({
-          pathname: '/Pages/CaptainRiding',
-          params: { rideId: emergencyData?.rideId }
+      } catch (error) {
+        console.error('[POPUP] Error polling ride status:', {
+          status: error.response?.status,
+          data: error.response?.data,
+          url: error.config?.url,
+          message: error.message
         });
       }
-    } catch (error) {
-      console.error('[POPUP] Error accepting request:', error);
-      if (error.response?.status === 400) {
-        Alert.alert('Error', 'This request has already been accepted by another driver');
-      } else {
-        Alert.alert('Error', 'Failed to accept request. Please try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const handleIgnore = () => {
-    console.log('[POPUP] Ignoring ride request:', emergencyData.rideId);
-    onClose();
-  };
+    const statusInterval = setInterval(pollRideStatus, 5000);
+    
+    // Initial poll
+    pollRideStatus();
+
+    return () => clearInterval(statusInterval);
+  }, [emergencyData?.rideId]);
+
+  if (!emergencyData) {
+    console.log('[POPUP] No emergency data provided');
+    return null;
+  }
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.arrowContainer} onPress={handleIgnore}>
+      <TouchableOpacity style={styles.arrowContainer} onPress={onClose}>
         <Text style={styles.arrow}>↓</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>🚨 Emergency Request! ({timeLeft}s)</Text>
+      <Text style={styles.title}>
+        🚨 Emergency Request! {remainingTime > 0 && `(${remainingTime}s)`}
+      </Text>
 
       <View style={styles.card}>
         <View style={styles.userInfo}>
-          <Image
-            style={styles.avatar}
-            source={{
-              uri: 'https://i.pinimg.com/236x/af/26/28/af26280b0ca305be47df0b799ed1b12b.jpg',
-            }}
-          />
-          <Text style={styles.username}>{emergencyData?.userName || 'Emergency User'}</Text>
+          <View style={styles.userDetails}>
+            <View style={styles.userHeader}>
+              <Text style={styles.username}>{userData.name}</Text>
+              <Text style={[
+                styles.statusBadge,
+                rideStatus === 'accepted' && styles.statusAccepted,
+                rideStatus === 'no_driver' && styles.statusNoDriver
+              ]}>
+                Status: {rideStatus}
+              </Text>
+            </View>
+            
+            {/* User Contact Information */}
+            <View style={styles.contactInfo}>
+              <TouchableOpacity 
+                style={styles.contactItem}
+                onPress={handlePhonePress}
+              >
+                <Text style={styles.icon}>📱</Text>
+                <Text style={styles.contactText}>
+                  {emergencyData?.user?.mobile || 'No phone number available'}
+                </Text>
+              </TouchableOpacity>
+              {userData.email && (
+                <View style={styles.contactItem}>
+                  <Text style={styles.icon}>✉️</Text>
+                  <Text style={styles.contactText}>{userData.email}</Text>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
-        <Text style={styles.distance}>{emergencyData?.distance || 'Nearby'}</Text>
       </View>
 
       <View style={styles.details}>
@@ -173,47 +167,35 @@ const EmergencyPopup = ({ onClose, emergencyData }) => {
           <Text style={styles.icon}>📍</Text>
           <View>
             <Text style={styles.detailTitle}>Emergency Location</Text>
-            <Text style={styles.detailSubtitle}>{emergencyData?.location || 'Location not specified'}</Text>
+            <Text style={styles.detailSubtitle}>
+              {emergencyData?.emergencyLocation?.address || 
+               (emergencyData?.emergencyLocation?.coordinates ? 
+                `${emergencyData.emergencyLocation.coordinates[1].toFixed(4)}, ${emergencyData.emergencyLocation.coordinates[0].toFixed(4)}` : 
+                'Location not specified')}
+            </Text>
           </View>
         </View>
 
         <View style={styles.detailRow}>
-          <Text style={styles.icon}>🚑</Text>
+          <Text style={styles.icon}>⏰</Text>
           <View>
-            <Text style={styles.detailTitle}>Emergency Type</Text>
-            <Text style={styles.detailSubtitle}>{emergencyData?.emergencyType || 'N/A'}</Text>
-          </View>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.icon}>📝</Text>
-          <View>
-            <Text style={styles.detailTitle}>Description</Text>
-            <Text style={styles.detailSubtitle}>{emergencyData?.description || 'N/A'}</Text>
-          </View>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.icon}>🕒</Text>
-          <View>
-            <Text style={styles.detailTitle}>Estimated Arrival</Text>
-            <Text style={styles.detailSubtitle}>{emergencyData?.estimatedArrivalTime || 'Unknown'}</Text>
+            <Text style={styles.detailTitle}>Request Time</Text>
+            <Text style={styles.detailSubtitle}>
+              {new Date(emergencyData?.createdAt).toLocaleTimeString()}
+            </Text>
           </View>
         </View>
       </View>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.declineButton} onPress={handleIgnore}>
+        <TouchableOpacity style={styles.declineButton} onPress={onClose}>
           <Text style={styles.declineText}>Ignore</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.acceptButton, loading && styles.loadingButton]} 
-          onPress={handleAccept}
-          disabled={loading}
+          style={[styles.acceptButton]} 
+          onPress={onAccept}
         >
-          <Text style={styles.acceptText}>
-            {loading ? 'Accepting...' : 'Accept'}
-          </Text>
+          <Text style={styles.acceptText}>Accept</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -222,74 +204,102 @@ const EmergencyPopup = ({ onClose, emergencyData }) => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
+    padding: 16,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     backgroundColor: '#fff',
   },
   arrowContainer: {
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   arrow: {
-    fontSize: 24,
+    fontSize: 22,
     color: '#aaa',
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 15,
+    marginBottom: 12,
     textAlign: 'center',
     color: '#c0392b',
   },
   card: {
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  userInfo: {
+    alignItems: 'flex-start',
+  },
+  userDetails: {
+    width: '100%',
+  },
+  userHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
+    marginBottom: 8,
   },
   username: {
     fontWeight: 'bold',
     fontSize: 16,
   },
-  distance: {
-    color: '#555',
+  contactInfo: {
+    marginTop: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  contactText: {
+    fontSize: 14,
+    color: '#007AFF',
+    marginLeft: 8,
+  },
+  statusBadge: {
+    fontSize: 14,
+    color: '#666',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    backgroundColor: '#f0f0f0',
+  },
+  statusAccepted: {
+    backgroundColor: '#e8f5e9',
+    color: '#2e7d32',
+  },
+  statusNoDriver: {
+    backgroundColor: '#ffebee',
+    color: '#c62828',
   },
   details: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   detailRow: {
     flexDirection: 'row',
-    marginBottom: 15,
+    marginBottom: 12,
     alignItems: 'flex-start',
   },
   icon: {
-    fontSize: 20,
-    marginRight: 15,
-    width: 24,
+    fontSize: 18,
+    marginRight: 12,
+    width: 22,
   },
   detailTitle: {
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 13,
     color: '#555',
   },
   detailSubtitle: {
     color: '#333',
     marginTop: 2,
-    fontSize: 15,
+    fontSize: 14,
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -297,8 +307,8 @@ const styles = StyleSheet.create({
   },
   declineButton: {
     backgroundColor: '#f0f0f0',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 10,
     width: '48%',
     alignItems: 'center',
@@ -306,21 +316,20 @@ const styles = StyleSheet.create({
   declineText: {
     color: '#333',
     fontWeight: 'bold',
+    fontSize: 14,
   },
   acceptButton: {
     backgroundColor: '#2ecc71',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 10,
     width: '48%',
     alignItems: 'center',
   },
-  loadingButton: {
-    backgroundColor: '#a0dcb2',
-  },
   acceptText: {
     color: '#fff',
     fontWeight: 'bold',
+    fontSize: 14,
   },
 });
 

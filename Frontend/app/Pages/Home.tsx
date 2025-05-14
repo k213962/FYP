@@ -42,14 +42,30 @@ const Home = () => {
           return;
         }
 
-        const decoded: any = jwtDecode(token);
+        console.log("Token validation check:", {
+          tokenLength: token.length,
+          tokenStart: token.substring(0, 20) + '...',
+          hasBearer: token.startsWith('Bearer ')
+        });
+
+        // Remove 'Bearer ' if it's included in the stored token
+        const tokenToVerify = token.startsWith('Bearer ') ? token.slice(7) : token;
+
+        const decoded: any = jwtDecode(tokenToVerify);
+        console.log("Decoded token payload:", {
+          id: decoded.id,
+          email: decoded.email,
+          exp: decoded.exp,
+          timeUntilExpiry: decoded.exp ? new Date(decoded.exp * 1000).getTime() - Date.now() : 'N/A'
+        });
+
         if (decoded && decoded.username) {
           setUsername(decoded.username);
         } else {
-          console.warn("Username not found in token.");
+          console.warn("Username not found in token payload:", decoded);
         }
       } catch (err) {
-        console.error("Failed to decode token:", err);
+        console.error("Token validation error:", err);
       }
     };
 
@@ -86,16 +102,27 @@ const Home = () => {
   const createRide = async () => {
     try {
       const baseUrl = process.env.EXPO_PUBLIC_BASE_URL;
+      console.log('Base URL:', baseUrl);
+
       if (!baseUrl) {
         Alert.alert("Error", "Base URL is not defined in the environment variables.");
         return;
       }
 
       const token = await AsyncStorage.getItem("token");
+      console.log('Token validation:', {
+        exists: !!token,
+        length: token?.length,
+        hasBearer: token?.startsWith('Bearer ')
+      });
+
       if (!token) {
         Alert.alert("Error", "Authorization token not found.");
         return;
       }
+
+      // Ensure token doesn't already have 'Bearer '
+      const authToken = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
 
       if (!vehicle) {
         Alert.alert("Error", "Please select a vehicle type first.");
@@ -108,38 +135,35 @@ const Home = () => {
       }
 
       // Format the emergency location data
-      // Note: GeoJSON format requires coordinates in [longitude, latitude] order
       const emergencyLocation = {
         type: 'Point',
         coordinates: [fixedRegion.longitude, fixedRegion.latitude],
         address: location
       };
 
-      // Convert vehicle type to match backend enum
-      let serviceType = vehicle.toLowerCase();
-      if (serviceType === 'fire brigade') {
-        serviceType = 'fire';
-      }
-
-      // Log the request data for debugging
-      console.log('Creating emergency request with data:', {
+      // Vehicle type is already in correct format from VehicleSelectionPanel
+      const requestData = {
         emergencyLocation,
-        serviceType,
+        serviceType: vehicle,
         emergencyType: "Emergency",
         description: `Emergency request at ${location}`
+      };
+
+      // Log the request details
+      console.log('Creating emergency request:', {
+        url: `${baseUrl}/rides/create`,
+        data: requestData,
+        authHeaderLength: authToken.length,
+        authHeaderStart: authToken.substring(0, 20) + '...'
       });
 
       const response = await axios.post(
         `${baseUrl}/rides/create`,
-        {
-          emergencyLocation,
-          serviceType,
-          emergencyType: "Emergency",
-          description: `Emergency request at ${location}`
-        },
+        requestData,
         {
           headers: {
-            Authorization: `Bearer ${token}`,
+            'Authorization': authToken,
+            'Content-Type': 'application/json'
           },
         }
       );
@@ -148,9 +172,31 @@ const Home = () => {
       setRideResponse(response.data);
       setSearchingForDriver(true);
     } catch (error: any) {
-      console.error("Error creating ride:", error.response?.data || error.message);
-      const errorMessage = error.response?.data?.error || error.message || "Failed to create ride. Please try again.";
-      Alert.alert("Error", errorMessage);
+      console.error('Ride creation error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers
+        }
+      });
+      
+      // Check for specific error types
+      if (error.response?.status === 401) {
+        Alert.alert(
+          "Authentication Error",
+          "Your session has expired. Please log in again."
+        );
+        // You might want to redirect to login here
+        return;
+      }
+      
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || "Failed to create emergency request. Please try again."
+      );
     }
   };
 

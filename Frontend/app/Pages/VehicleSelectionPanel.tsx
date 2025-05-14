@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
 
-const VEHICLES = ["Police", "Fire Brigade", "Ambulance"];
+const VEHICLES = ["Police", "Fire", "Ambulance"];
 
 const VehicleSelectionPanel = ({ onSelect }: { onSelect: (vehicle: string) => void }) => {
   const slideAnim = useRef(new Animated.Value(300)).current; // Start off-screen (300px below)
@@ -15,6 +15,12 @@ const VehicleSelectionPanel = ({ onSelect }: { onSelect: (vehicle: string) => vo
     }).start();
   }, [slideAnim]);
 
+  const handleVehicleSelect = (vehicle: string) => {
+    // Convert to lowercase for backend compatibility
+    const serviceType = vehicle.toLowerCase();
+    onSelect(serviceType);
+  };
+
   return (
     <Animated.View
       style={[
@@ -23,13 +29,13 @@ const VehicleSelectionPanel = ({ onSelect }: { onSelect: (vehicle: string) => vo
       ]}
     >
       <View style={styles.panel}>
-        <Text style={styles.title}>Select Your Vehicle</Text>
+        <Text style={styles.title}>Select Emergency Service</Text>
         <View style={styles.vehicleList}>
           {VEHICLES.map((vehicle) => (
             <TouchableOpacity
               key={vehicle}
               style={styles.button}
-              onPress={() => onSelect(vehicle)} // Pass selected vehicle to parent
+              onPress={() => handleVehicleSelect(vehicle)}
             >
               <Text style={styles.buttonText}>{vehicle}</Text>
             </TouchableOpacity>

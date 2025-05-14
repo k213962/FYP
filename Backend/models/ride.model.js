@@ -30,6 +30,14 @@ const rideSchema = new mongoose.Schema({
         required: true,
         enum: ['ambulance', 'fire', 'police']
     },
+    emergencyType: {
+        type: String,
+        required: true
+    },
+    description: {
+        type: String,
+        required: true
+    },
     status: {
         type: String,
         enum: ['pending', 'accepted', 'in-progress', 'completed', 'cancelled'],

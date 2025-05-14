@@ -165,8 +165,8 @@ export default CaptainInfoCard;
 
 const styles = StyleSheet.create({
   detailsCard: {
-    flex: 2,
-    padding: 16,
+    height: 200,
+    padding: 12,
     marginTop: -40,
     backgroundColor: '#f9f9f9',
     borderTopLeftRadius: 24,
@@ -176,44 +176,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   name: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   earnings: {
     alignItems: 'flex-end',
   },
   earningsText: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#10b981',
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
+    marginTop: 2,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   statusText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   statusBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     backgroundColor: '#1e40af',
-    borderRadius: 20,
+    borderRadius: 16,
   },
   statusBtnText: {
     color: 'white',
     fontWeight: '600',
+    fontSize: 13,
   }
 });

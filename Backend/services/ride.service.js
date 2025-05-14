@@ -355,8 +355,19 @@ module.exports.getNearbyPendingRides = async (longitude, latitude, maxDistance =
 module.exports.getRideById = async (rideId) => {
     try {
         const ride = await rideModel.findById(rideId)
-            .populate('user', 'firstname lastname phone email')
-            .populate('captain', 'firstname lastname phone vehicleType vehicleNoPlate');
+            .populate('user', 'firstname lastname phone email mobile')
+            .populate('captain', 'firstname lastname phone vehicleType vehicleNoPlate location');
+        
+        if (!ride) {
+            console.warn(`No ride found with ID ${rideId}`);
+            return null;
+        }
+
+        console.log(`Found ride ${rideId} with user data:`, {
+            userId: ride.user?._id,
+            userName: ride.user ? `${ride.user.firstname || ''} ${ride.user.lastname || ''}`.trim() : 'Anonymous',
+            userPhone: ride.user?.mobile
+        });
         
         return ride;
     } catch (error) {

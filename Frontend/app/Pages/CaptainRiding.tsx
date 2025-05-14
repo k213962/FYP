@@ -1,22 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { io, Socket } from 'socket.io-client';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 interface Ride {
   _id: string;
-  emergencyType: string;
   emergencyLocation: {
-    address?: string;
     coordinates: [number, number];
+    address: string;
   };
-  status: 'pending' | 'accepted' | 'ride-started' | 'completed' | 'cancelled';
-  actualArrivalTime?: string;
+  emergencyType: string;
+  description: string;
+  status: string;
+  user: {
+    firstname: string;
+    lastname: string;
+    phone: string;
+  };
 }
-
-const socket: Socket = io(process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3000');
 
 const CaptainRiding = () => {
   const params = useLocalSearchParams();
@@ -24,6 +27,7 @@ const CaptainRiding = () => {
   const [ride, setRide] = useState<Ride | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const rideId = params.rideId as string;
@@ -36,20 +40,17 @@ const CaptainRiding = () => {
 
     fetchRideDetails(rideId);
 
-    // Join the ride room for real-time updates
-    socket.emit('joinRoom', `ride_${rideId}`);
-
-    // Listen for ride updates
-    socket.on('rideUpdated', (updatedRide: Ride) => {
-      if (updatedRide._id === rideId) {
-        setRide(updatedRide);
-      }
-    });
+    // Set up polling for ride updates instead of sockets
+    pollingIntervalRef.current = setInterval(() => {
+      fetchRideDetails(rideId);
+    }, 5000);
 
     // Cleanup on unmount
     return () => {
-      socket.emit('leaveRoom', `ride_${rideId}`);
-      socket.off('rideUpdated');
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
     };
   }, [params.rideId]);
 
@@ -166,12 +167,49 @@ const CaptainRiding = () => {
         {ride.emergencyLocation?.address && (
           <Text style={styles.detailText}>Location: {ride.emergencyLocation.address}</Text>
         )}
-        {ride.actualArrivalTime && (
-          <Text style={styles.detailText}>
-            Arrival Time: {new Date(ride.actualArrivalTime).toLocaleString()}
-          </Text>
+        {ride.description && (
+          <Text style={styles.detailText}>Description: {ride.description}</Text>
+        )}
+        {ride.user && (
+          <View style={styles.userInfoContainer}>
+            <Text style={styles.sectionTitle}>User Information</Text>
+            <Text style={styles.detailText}>
+              Name: {ride.user.firstname} {ride.user.lastname}
+            </Text>
+            {ride.user.phone && (
+              <TouchableOpacity>
+                <Text style={styles.phoneText}>Phone: {ride.user.phone}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
+      
+      {/* Add map view for better visualization */}
+      {ride.emergencyLocation?.coordinates && (
+        <View style={styles.mapContainer}>
+          <MapView
+            provider={PROVIDER_GOOGLE}
+            style={styles.map}
+            initialRegion={{
+              latitude: ride.emergencyLocation.coordinates[1],
+              longitude: ride.emergencyLocation.coordinates[0],
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+          >
+            <Marker
+              coordinate={{
+                latitude: ride.emergencyLocation.coordinates[1],
+                longitude: ride.emergencyLocation.coordinates[0],
+              }}
+              title="Emergency Location"
+              description={ride.emergencyLocation.address || "Emergency location"}
+            />
+          </MapView>
+        </View>
+      )}
+      
       {ride.status === 'accepted' && (
         <TouchableOpacity style={styles.button} onPress={handleStartRide}>
           <Text style={styles.buttonText}>Start Ride</Text>
@@ -226,6 +264,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#dc2626',
     marginBottom: 20,
+  },
+  mapContainer: {
+    height: 200,
+    marginBottom: 20,
+  },
+  map: {
+    flex: 1,
+  },
+  userInfoContainer: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 5,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  phoneText: {
+    color: '#007AFF',
+    fontSize: 16,
   },
 });
 
