@@ -108,6 +108,7 @@ const Home = () => {
       }
 
       // Format the emergency location data
+      // Note: GeoJSON format requires coordinates in [longitude, latitude] order
       const emergencyLocation = {
         type: 'Point',
         coordinates: [fixedRegion.longitude, fixedRegion.latitude],

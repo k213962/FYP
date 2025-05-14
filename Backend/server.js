@@ -6,14 +6,8 @@ const userRoutes = require("./routes/user.routes");
 const captainRoutes = require("./routes/captain.routes");
 const mapRoutes = require("./routes/map.routes");
 const rideRoutes = require("./routes/ride.routes");
-const http = require('http');
-const socketIO = require('./socket');
 
 const app = express();
-const server = http.createServer(app);
-
-// Initialize socket.io
-socketIO.init(server);
 
 // Middleware
 app.use(express.json());
@@ -41,4 +35,4 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

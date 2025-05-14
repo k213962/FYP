@@ -25,23 +25,10 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
   const [loading, setLoading] = useState(true);
   const [currentStatus, setCurrentStatus] = useState('Offline');
 
-  const setCaptainOffline = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-
-      await axios.patch(
-        `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`,
-        { status: 'Offline' },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
-      setCurrentStatus('Offline');
-    } catch (error) {
-      console.error('Error setting captain offline:', error);
+  const syncWithParentStatus = () => {
+    if (propStatus !== currentStatus) {
+      console.log(`[CARD] Syncing status with parent: ${propStatus}`);
+      setCurrentStatus(propStatus);
     }
   };
 
@@ -73,42 +60,56 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
       }
 
       const newStatus = currentStatus === 'Online' ? 'Offline' : 'Online';
-      const response = await axios.patch(
-        `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`,
-        { status: newStatus },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
+      console.log('[CARD] Changing captain status from', currentStatus, 'to', newStatus);
+      
+      // Use XMLHttpRequest for more reliable updates
+      const xhr = new XMLHttpRequest();
+      xhr.open('PATCH', `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          console.log('[CARD] Status update response code:', xhr.status);
+          console.log('[CARD] Status update response:', xhr.responseText);
+          
+          if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('[CARD] Status successfully changed to', newStatus);
+            
+            // Update local state
+            setCurrentStatus(newStatus);
+            
+            // Call the parent's toggleStatus to ensure parent component is aware
+            toggleStatus();
+            
+            // Refetch to ensure data is updated
+            setTimeout(fetchCaptainData, 1000);
+            
+            Alert.alert('Success', `Status changed to ${newStatus}`);
+          } else {
+            console.error('[CARD] Failed to update status:', xhr.responseText);
+            Alert.alert('Error', 'Failed to update status. Please try again.');
           }
         }
-      );
-
-      if (response.status === 200) {
-        setCurrentStatus(newStatus);
-        toggleStatus();
-        fetchCaptainData();
-      }
+      };
+      
+      const payload = JSON.stringify({ status: newStatus });
+      console.log('[CARD] Sending payload:', payload);
+      
+      xhr.send(payload);
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error('[CARD] Error updating status:', error);
       Alert.alert('Error', 'Failed to update status');
     }
   };
 
   useEffect(() => {
     fetchCaptainData();
-
-    // Handle app state changes
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'background' || nextAppState === 'inactive') {
-        setCaptainOffline();
-      }
-    });
-
-    return () => {
-      subscription.remove();
-      setCaptainOffline();
-    };
   }, []);
+
+  useEffect(() => {
+    syncWithParentStatus();
+  }, [propStatus]);
 
   if (loading) {
     return (

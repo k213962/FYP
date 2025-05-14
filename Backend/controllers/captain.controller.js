@@ -4,7 +4,6 @@ const { validationResult } = require("express-validator");
 const Captain = require("../models/captain.model");
 const BlacklistToken = require("../models/blacklistToken.model");
 const captainService = require('../services/captain.service');
-const socketIO = require('../socket');
 
 // Register Captain
 exports.registerCaptain = async (req, res) => {
@@ -173,13 +172,6 @@ exports.updateLocation = async (req, res) => {
 
         const updatedCaptain = await captainService.updateCaptainLocation(captainId, location);
 
-        // Emit location update to connected clients
-        const io = socketIO.getIO();
-        io.emit(`captain_${captainId}_location`, {
-            captainId,
-            location: updatedCaptain.location
-        });
-
         return res.status(200).json({
             message: 'Location updated successfully',
             location: updatedCaptain.location
@@ -281,13 +273,6 @@ exports.startLocationTracking = async (req, res) => {
         const { location } = req.body;
 
         const result = await captainService.startLocationTracking(captainId, location);
-
-        // Emit tracking started event
-        const io = socketIO.getIO();
-        io.emit(`captain_${captainId}_tracking_started`, {
-            captainId,
-            timestamp: new Date()
-        });
 
         return res.status(200).json(result);
     } catch (error) {

@@ -1,92 +1,159 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useRouter } from "expo-router";
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import io from 'socket.io-client';
 
 const EmergencyPopup = ({ onClose, emergencyData }) => {
+  // Log when component renders for debugging
+  console.log('[POPUP] RidePopup rendering with data:', JSON.stringify(emergencyData));
+
   // ✅ Prevent component from rendering if no data
-  if (!emergencyData) return null;
+  if (!emergencyData) {
+    console.log('[POPUP] No emergency data, not rendering popup');
+    return null;
+  }
+
+  // Add extra validation to ensure we have the core needed fields
+  const isValidData = emergencyData.rideId && emergencyData.timeoutSeconds;
+  if (!isValidData) {
+    console.error('[POPUP] Invalid emergency data:', JSON.stringify(emergencyData));
+    Alert.alert('Debug', 'Received invalid ride data');
+    return null;
+  }
 
   const router = useRouter();
-  const [socket, setSocket] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(emergencyData?.timeoutSeconds || 15);
+  const timerRef = useRef(null);
 
   useEffect(() => {
-    const newSocket = io(process.env.EXPO_PUBLIC_BASE_URL, {
-      transports: ['websocket'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    console.log('[POPUP] Setting up timer for ride popup');
 
-    newSocket.on('connect', () => {
-      console.log('Socket connected successfully');
-    });
+    // Set up countdown timer
+    if (emergencyData?.timeoutSeconds) {
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prevTime) => {
+          const newTime = prevTime - 1;
+          console.log('[POPUP] Countdown:', newTime);
+          if (newTime <= 0) {
+            clearInterval(timerRef.current);
+            // Auto-close when timer expires
+            console.log('[POPUP] Timer expired, closing popup');
+            onClose();
+            return 0;
+          }
+          return newTime;
+        });
+      }, 1000);
 
-    newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
+      return () => {
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+        }
+      };
+    }
+  }, [emergencyData?.timeoutSeconds]); 
 
-    newSocket.on('emergencyRequestAccepted', (data) => {
-      if (data.rideId === emergencyData?.rideId) {
-        Alert.alert(
-          'Request Accepted',
-          'Another driver has accepted this emergency request.',
-          [{ text: 'OK', onPress: onClose }]
+  // Poll for ride status to check if another driver accepted it
+  useEffect(() => {
+    const checkRideStatus = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) return;
+
+        const rideStatusResponse = await axios.get(
+          `${process.env.EXPO_PUBLIC_BASE_URL}/rides/status-updates`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
         );
-      }
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      if (newSocket) {
-        newSocket.disconnect();
+        
+        const updates = rideStatusResponse.data.updates || [];
+        
+        // Check if this ride was accepted by another driver
+        const acceptedByOther = updates.find(
+          update => update.type === 'ride_accepted' && 
+                   update.rideId === emergencyData.rideId
+        );
+        
+        if (acceptedByOther) {
+          Alert.alert(
+            'Request Accepted',
+            'Another driver has accepted this emergency request.',
+            [{ text: 'OK', onPress: onClose }]
+          );
+        }
+      } catch (error) {
+        console.error('[POPUP] Error checking ride status:', error);
       }
     };
-  }, [emergencyData?.rideId]); // ✅ use optional chaining
+    
+    // Check every 5 seconds
+    const statusInterval = setInterval(checkRideStatus, 5000);
+    
+    return () => {
+      clearInterval(statusInterval);
+    };
+  }, [emergencyData.rideId]);
 
   const handleAccept = async () => {
     try {
-      const userToken = await AsyncStorage.getItem("userToken");
-      if (!userToken) {
+      setLoading(true);
+      console.log('[POPUP] Accepting ride request for ID:', emergencyData?.rideId);
+      
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
         Alert.alert('Error', 'Authentication required');
+        setLoading(false);
         return;
       }
 
+      console.log('[POPUP] Sending accept request to server');
       const response = await axios.post(
         `${process.env.EXPO_PUBLIC_BASE_URL}/rides/${emergencyData?.rideId}/accept`,
         {},
         {
           headers: {
-            Authorization: `Bearer ${userToken}`
+            Authorization: `Bearer ${token}`
           }
         }
       );
 
+      console.log('[POPUP] Accept response:', response.status, response.data);
       if (response.status === 200) {
+        console.log('[POPUP] Successfully accepted ride, navigating to CaptainRiding');
         router.push({
           pathname: '/Pages/CaptainRiding',
           params: { rideId: emergencyData?.rideId }
         });
       }
     } catch (error) {
+      console.error('[POPUP] Error accepting request:', error);
       if (error.response?.status === 400) {
         Alert.alert('Error', 'This request has already been accepted by another driver');
       } else {
         Alert.alert('Error', 'Failed to accept request. Please try again.');
       }
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleIgnore = () => {
+    console.log('[POPUP] Ignoring ride request:', emergencyData.rideId);
+    onClose();
   };
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.arrowContainer} onPress={onClose}>
+      <TouchableOpacity style={styles.arrowContainer} onPress={handleIgnore}>
         <Text style={styles.arrow}>↓</Text>
       </TouchableOpacity>
 
-      <Text style={styles.title}>🚨 Emergency Request!</Text>
+      <Text style={styles.title}>🚨 Emergency Request! ({timeLeft}s)</Text>
 
       <View style={styles.card}>
         <View style={styles.userInfo}>
@@ -129,120 +196,132 @@ const EmergencyPopup = ({ onClose, emergencyData }) => {
         <View style={styles.detailRow}>
           <Text style={styles.icon}>🕒</Text>
           <View>
-            <Text style={styles.detailTitle}>Reported</Text>
-            <Text style={styles.detailSubtitle}>Just now</Text>
+            <Text style={styles.detailTitle}>Estimated Arrival</Text>
+            <Text style={styles.detailSubtitle}>{emergencyData?.estimatedArrivalTime || 'Unknown'}</Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.buttons}>
-        <TouchableOpacity onPress={handleAccept} style={styles.acceptButton}>
-          <Text style={styles.acceptText}>Accept Request</Text>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.declineButton} onPress={handleIgnore}>
+          <Text style={styles.declineText}>Ignore</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.ignoreButton} onPress={onClose}>
-          <Text style={styles.ignoreText}>Ignore</Text>
+        <TouchableOpacity 
+          style={[styles.acceptButton, loading && styles.loadingButton]} 
+          onPress={handleAccept}
+          disabled={loading}
+        >
+          <Text style={styles.acceptText}>
+            {loading ? 'Accepting...' : 'Accept'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 };
 
-export default EmergencyPopup;
-
 const styles = StyleSheet.create({
   container: {
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     backgroundColor: '#fff',
-    padding: 16,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    elevation: 8,
   },
   arrowContainer: {
     alignSelf: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   arrow: {
-    fontSize: 32,
+    fontSize: 24,
     color: '#aaa',
   },
   title: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 15,
     textAlign: 'center',
-    color: '#dc2626',
+    color: '#c0392b',
   },
   card: {
-    backgroundColor: '#fde68a',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 16,
+    padding: 15,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
+    marginBottom: 20,
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
   },
   username: {
+    fontWeight: 'bold',
     fontSize: 16,
-    fontWeight: '500',
   },
   distance: {
-    fontWeight: '600',
-    fontSize: 16,
-    color: '#b91c1c',
+    color: '#555',
   },
   details: {
     marginBottom: 20,
   },
   detailRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 15,
+    alignItems: 'flex-start',
   },
   icon: {
     fontSize: 20,
-    marginRight: 12,
+    marginRight: 15,
+    width: 24,
   },
   detailTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    fontSize: 14,
+    color: '#555',
   },
   detailSubtitle: {
-    color: '#666',
-    fontSize: 14,
+    color: '#333',
+    marginTop: 2,
+    fontSize: 15,
   },
-  buttons: {
-    gap: 12,
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  declineButton: {
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    width: '48%',
+    alignItems: 'center',
+  },
+  declineText: {
+    color: '#333',
+    fontWeight: 'bold',
   },
   acceptButton: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#2ecc71',
     paddingVertical: 12,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    width: '48%',
     alignItems: 'center',
+  },
+  loadingButton: {
+    backgroundColor: '#a0dcb2',
   },
   acceptText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  ignoreButton: {
-    backgroundColor: '#f3f4f6',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  ignoreText: {
-    color: '#4b5563',
-    fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
 });
+
+export default EmergencyPopup;

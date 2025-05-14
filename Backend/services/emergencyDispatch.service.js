@@ -108,16 +108,6 @@ class EmergencyDispatchService {
           dispatchId: dispatch._id
         });
 
-        // Emit socket event for real-time notification
-        global.io.emit(`driver_${driver._id}`, {
-          type: 'NEW_EMERGENCY',
-          data: {
-            emergencyId,
-            location: dispatch.location,
-            description: dispatch.description
-          }
-        });
-
       } catch (error) {
         console.error(`Failed to assign ${service} driver:`, error);
         dispatchResults.failed.push(service);

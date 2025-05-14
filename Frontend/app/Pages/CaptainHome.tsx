@@ -8,6 +8,10 @@ import {
   Dimensions,
   Animated,
   Alert,
+  AppState,
+  ScrollView,
+  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -16,14 +20,40 @@ import RidePopup from '../../Components/RidePopup';
 import { useRouter } from 'expo-router';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StatusBar } from 'expo-status-bar';
+import { Feather, MaterialIcons, Ionicons } from '@expo/vector-icons';
 
-const baseUrl = process.env.EXPO_PUBLIC_BASE_URL;
+const baseUrl = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+// Add a check for baseUrl near the top
+console.log('[ENV] Using base URL:', baseUrl);
+if (!baseUrl || baseUrl === 'http://localhost:3000') {
+  console.warn('[ENV] Warning: Using localhost as base URL. This may not work on real devices.');
+}
+
+// interface for emergency data passed to the popup
+interface EmergencyData {
+  rideId: string;
+  timeoutSeconds: number;
+  emergencyLocation: {
+    address?: string;
+    latitude: number;
+    longitude: number;
+  };
+  emergencyType: string;
+  description: string;
+  distanceInKm: number;
+  estimatedArrivalTime: string;
+  userName?: string;
+  createdAt: string;
+}
 
 const Home = () => {
   const router = useRouter();
-  const [status, setStatus] = useState('Online');
-  const [showRidePopup, setShowRidePopup] = useState(true);
-  const [emergencyData, setEmergencyData] = useState(null);
+  const [status, setStatus] = useState('Offline');
+  const [showRidePopup, setShowRidePopup] = useState(false);
+  const [emergencyData, setEmergencyData] = useState<EmergencyData | null>(null);
+  const appState = useRef(AppState.currentState);
   const [currentLocation, setCurrentLocation] = useState({
     latitude: 24.8607,
     longitude: 67.0011,
@@ -34,193 +64,44 @@ const Home = () => {
 
   const popupAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
-  // Function to update location on backend
-  const updateLocationOnBackend = async (latitude: number, longitude: number) => {
+  // Add a useRef for tracking first render
+  const isFirstRender = React.useRef(true);
+
+  // Function to update status in database
+  const updateDriverStatusInDB = async (newStatus: string) => {
     try {
-      // Get the token from AsyncStorage
+      console.log(`[STATUS] Beginning status update to ${newStatus}...`);
+      
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        console.error('No authentication token found');
-        return;
+        console.error('[STATUS] No authentication token found');
+        return false;
       }
+      console.log(`[STATUS] Token found: ${token.substring(0, 10)}...`);
 
-      // Only update location if captain is online
-      if (status !== 'Online') {
-        console.log('Skipping location update - Captain is offline');
-        return;
-      }
-
-      console.log('Updating location for online captain:', {
-        latitude,
-        longitude,
-        status
-      });
-
-      const locationData = {
-        location: {
-          type: 'Point',
-          coordinates: [latitude,longitude]
-        }
-      };
-
-      const response = await axios.post(`${baseUrl}/captain/location`, 
-        locationData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.status === 200) {
-        console.log('Location updated successfully');
-      }
-    } catch (error: any) {
-      console.error('Error updating location:', error.message);
-      if (error.response) {
-        console.error('Error response data:', error.response.data);
-        console.error('Error response status:', error.response.status);
-      }
-    }
-  };
-
-  useEffect(() => {
-    // Verify token and status on component mount
-    const verifyTokenAndStatus = async () => {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        console.error('No token found in AsyncStorage');
-        router.replace('./CaptainLogin');
-        return;
-      }
-      console.log('Token found in AsyncStorage');
-
+      // First, check current status in DB
       try {
-        // Get current captain status
-        const response = await axios.get(`${baseUrl}/captain/profile`, {
+        console.log(`[STATUS] Checking current status in DB before update...`);
+        const checkResponse = await axios.get(`${baseUrl}/captain/profile`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         });
-        console.log('Current captain status:', response.data);
-        if (response.data.status) {
-          setStatus(response.data.status);
-        }
-      } catch (error: any) {
-        console.error('Error fetching captain status:', error.message);
-        if (error.response) {
-          console.error('Error response data:', error.response.data);
-        }
-      }
-    };
-    verifyTokenAndStatus();
-  }, []);
-
-  useEffect(() => {
-    Animated.timing(popupAnim, {
-      toValue: showRidePopup ? 0 : Dimensions.get('window').height,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
-  }, [showRidePopup]);
-
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Permission to access location was denied');
-        return;
+        console.log(`[STATUS] Current status in DB: ${checkResponse.data.status}`);
+      } catch (checkErr) {
+        console.error('[STATUS] Error checking current status:', checkErr);
       }
 
-      console.log('Location permission granted, getting current position...');
-      let location = await Location.getCurrentPositionAsync({});
-      console.log('Initial location received:', {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude
+      console.log(`[STATUS] Now sending update request to ${baseUrl}/captain/status`);
+      console.log(`[STATUS] Request body:`, { status: newStatus });
+      console.log(`[STATUS] Request headers:`, {
+        'Authorization': `Bearer ${token.substring(0, 10)}...`,
+        'Content-Type': 'application/json'
       });
-      
-      const newLocation = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      };
-      
-      setCurrentLocation(newLocation);
-    })();
-  }, []);
 
-  // New useEffect to handle location updates based on status
-  useEffect(() => {
-    if (status === 'Online') {
-      // Start location tracking when online
-      const startLocationTracking = async () => {
-        console.log('Starting location tracking - Captain is online');
-        const subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 10000, // Update every 10 seconds
-            distanceInterval: 10, // Update every 10 meters
-          },
-          (newLocation) => {
-            const updatedLocation = {
-              latitude: newLocation.coords.latitude,
-              longitude: newLocation.coords.longitude,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            };
-            setCurrentLocation(updatedLocation);
-            // Update location on backend when location changes
-            updateLocationOnBackend(newLocation.coords.latitude, newLocation.coords.longitude);
-          }
-        );
-        setLocationSubscription(subscription);
-      };
-      startLocationTracking();
-    } else {
-      // Stop location tracking when offline
-      if (locationSubscription) {
-        console.log('Stopping location tracking - Captain is offline');
-        locationSubscription.remove();
-        setLocationSubscription(null);
-      }
-    }
-
-    // Cleanup subscription on component unmount
-    return () => {
-      if (locationSubscription) {
-        locationSubscription.remove();
-      }
-    };
-  }, [status]);
-
-  const toggleStatus = async () => {
-    const newStatus = status === 'Online' ? 'Offline' : 'Online';
-    console.log('Current status:', status);
-    console.log('Attempting to change to:', newStatus);
-    
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        console.error('No authentication token found');
-        return;
-      }
-
-      // First verify current status
-      const verifyResponse = await axios.get(`${baseUrl}/captain/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log('Current status from server:', verifyResponse.data);
-
-      // Update status
-      console.log(`Updating status to ${newStatus}...`);
-      const response = await axios.patch(`${baseUrl}/captain/status`, 
+      const response = await axios.patch(
+        `${baseUrl}/captain/status`,
         { status: newStatus },
         {
           headers: {
@@ -229,70 +110,114 @@ const Home = () => {
           }
         }
       );
-      
-      console.log('Status update response:', response.data);
 
-      // Verify the update was successful
-      const verifyUpdateResponse = await axios.get(`${baseUrl}/captain/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      console.log(`[STATUS] Update response status: ${response.status}`);
+      console.log(`[STATUS] Update response data:`, response.data);
+
+      if (response.status === 200) {
+        console.log(`[STATUS] Successfully updated status to ${newStatus} in database`);
+        
+        // Verify the update by checking the status again
+        try {
+          console.log(`[STATUS] Verifying the update...`);
+          const verifyResponse = await axios.get(`${baseUrl}/captain/profile`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          console.log(`[STATUS] Updated status in DB:`, verifyResponse.data.status);
+          
+          if (verifyResponse.data.status === newStatus) {
+            console.log(`[STATUS] Verification PASSED: DB status (${verifyResponse.data.status}) matches UI status (${newStatus})`);
+          } else {
+            console.error(`[STATUS] Verification FAILED: DB status (${verifyResponse.data.status}) does not match UI status (${newStatus})`);
+          }
+        } catch (verifyErr) {
+          console.error('[STATUS] Error verifying status update:', verifyErr);
         }
-      });
 
-      if (verifyUpdateResponse.data.status === newStatus) {
-        setStatus(newStatus);
-        console.log(`Successfully updated and verified status to ${newStatus}`);
+        return true;
       } else {
-        console.error('Status verification failed. Server status:', verifyUpdateResponse.data.status);
-        throw new Error('Status update verification failed');
+        console.error(`[STATUS] Failed to update status. Server response:`, response.data);
+        return false;
       }
-    } catch (error: any) {
-      console.error('Error updating status:', error.message);
-      if (error.response) {
-        console.error('Error response data:', error.response.data);
-        console.error('Error response status:', error.response.status);
+    } catch (error) {
+      console.error('[STATUS] Error updating status:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('[STATUS] Error details:', error.response?.data);
       }
-      // Show error to user
-      Alert.alert(
-        'Status Update Failed',
-        'Failed to update status. Please try again.',
-        [{ text: 'OK' }]
-      );
+      return false;
     }
   };
 
-  // Add status verification on component mount
-  useEffect(() => {
-    const verifyStatus = async () => {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        if (!token) {
-          console.error('No token found');
-          return;
-        }
+  // Toggle captain status function
+  const toggleStatus = async () => {
+    const newStatus = status === 'Online' ? 'Offline' : 'Online';
+    console.log(`[STATUS] User toggled status button from ${status} to ${newStatus}`);
+    
+    // Update status in local state first for immediate UI feedback
+    setStatus(newStatus);
+    
+    // The useEffect will take care of updating the database
+  };
 
-        const response = await axios.get(`${baseUrl}/captain/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+  // Function to handle ride requests
+  const handleRideRequest = (data: any) => {
+    console.log('[REQUEST] Processing ride request:', data);
 
-        if (response.data.status) {
-          console.log('Initial status from server:', response.data.status);
-          setStatus(response.data.status);
-        }
-      } catch (error: any) {
-        console.error('Error verifying initial status:', error.message);
-        if (error.response) {
-          console.error('Error response:', error.response.data);
-        }
-      }
+    // Validate the incoming data
+    if (!data || !data.rideId || !data.emergencyLocation || 
+        !data.emergencyType || !data.description) {
+      console.error('[REQUEST] Invalid ride request data:', data);
+      return;
+    }
+
+    // Don't show if already displaying a popup
+    if (showRidePopup) {
+      console.log('[REQUEST] Already showing a ride popup, not showing another');
+      return;
+    }
+
+    // Format and store the emergency data
+    const formattedData: EmergencyData = {
+      rideId: data.rideId,
+      timeoutSeconds: data.timeoutSeconds || 15,
+      emergencyLocation: data.emergencyLocation,
+      emergencyType: data.emergencyType,
+      description: data.description,
+      distanceInKm: data.distanceInKm || 0,
+      estimatedArrivalTime: data.estimatedArrivalTime || '~10 mins',
+      userName: data.userName || 'Anonymous',
+      createdAt: data.createdAt || new Date().toISOString()
     };
 
-    verifyStatus();
-  }, []);
+    // Set the emergency data and show popup
+    setEmergencyData(formattedData);
+    console.log('[REQUEST] Setting showRidePopup to true for ride:', formattedData.rideId);
+    setShowRidePopup(true);
+
+    // Play a sound alert
+    try {
+      // Sound code would go here
+      console.log('[REQUEST] Would play alert sound here if implemented');
+    } catch (error) {
+      console.error('[REQUEST] Error playing alert sound:', error);
+    }
+  };
+
+  // Add a useEffect that watches status changes and updates the database
+  useEffect(() => {
+    // Skip the initial render
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    
+    // This will synchronize UI status with database when it changes
+    console.log(`[STATUS] Status changed to ${status}, synchronizing with database`);
+    updateDriverStatusInDB(status);
+  }, [status]);
 
   return (
     <View style={styles.container}>
@@ -332,65 +257,104 @@ const Home = () => {
       {/* Ride Popup */}
       <Animated.View
         style={[
+          styles.popupContainer,
           {
             transform: [{ translateY: popupAnim }],
             position: 'absolute',
             bottom: 0,
             left: 0,
             right: 0,
+            zIndex: 1000, // Make sure it appears above everything else
           },
         ]}
       >
-        <RidePopup onClose={() => setShowRidePopup(false)} emergencyData={emergencyData} />
+        {emergencyData && (
+          <View style={styles.popupWrapper} onLayout={() => console.log('[POPUP] Popup view rendered')}>
+            <RidePopup onClose={() => {
+              console.log('[POPUP] Closing popup');
+              setShowRidePopup(false);
+              setEmergencyData(null);
+            }} emergencyData={emergencyData} />
+          </View>
+        )}
       </Animated.View>
+
+      <StatusBar style="dark" />
     </View>
   );
 };
 
-export default Home;
-
-const { width } = Dimensions.get('window');
-
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
   },
   header: {
-    position: 'absolute',
-    top: 0,
-    zIndex: 10,
-    padding: 24,
+    height: 70,
+    width: '100%',
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingTop: 20,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    width,
+    justifyContent: 'space-between',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#ddd',
+    zIndex: 1,
   },
   logo: {
-    width: 64,
-    height: 20,
-    resizeMode: 'contain',
+    width: 50,
+    height: 50,
+    marginLeft: 10,
   },
   logoutBtn: {
-    height: 40,
-    width: 40,
-    backgroundColor: 'white',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
+    padding: 5,
   },
   logoutImage: {
-    width: 24,
-    height: 24,
-    resizeMode: 'contain',
+    width: 30,
+    height: 30,
   },
   mapContainer: {
-    flex: 3,
-    marginTop: 80,
+    flex: 1,
   },
   map: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
   },
+  popupContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(0,0,0,0)',
+    justifyContent: 'flex-end',
+  },
+  popupWrapper: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
+    shadowOpacity: 0.27,
+    shadowRadius: 4.65,
+    elevation: 6,
+    paddingBottom: 20,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 5,
+  },
+  statusText: {
+    fontWeight: 'bold',
+  },
+  // Add Styles for any remaining elements
 });
+
+export default Home;

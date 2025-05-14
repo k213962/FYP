@@ -1,6 +1,8 @@
 const rideService = require('../services/ride.service');
 const { validationResult } = require('express-validator');
-const socketIO = require('../socket');
+
+// Simplified to store only ride status updates
+const rideStatusUpdates = new Map();
 
 const RideController = {
     createRide: async (req, res) => {
@@ -21,38 +23,40 @@ const RideController = {
                 description
             });
 
-            // Return response immediately after creating the request
-            res.status(201).json({ 
-                message: 'Emergency request created successfully', 
-                ride
-            });
-
-            // Handle driver search and notification asynchronously
-            try {
-                // Find nearby drivers
-                const nearbyDrivers = await rideService.findNearbyDrivers(
-                    ride.emergencyLocation,
-                    ride.serviceType
-                );
-
-                // Notify nearby drivers about the emergency
-                const io = socketIO.getIO();
-                nearbyDrivers.forEach(driver => {
-                    io.to(driver._id.toString()).emit('newEmergencyRequest', {
-                        rideId: ride._id,
-                        emergencyLocation: ride.emergencyLocation,
-                        serviceType: ride.serviceType,
-                        emergencyType: ride.emergencyType,
-                        description: ride.description
-                    });
+            // Find nearby drivers 
+            const nearbyDrivers = await rideService.findNearbyDrivers(
+                emergencyLocation,
+                serviceType,
+                emergencyType
+            );
+            
+            console.log(`\n🚗 Found ${nearbyDrivers.length} nearby drivers for ride ${ride._id}`);
+            if (nearbyDrivers.length === 0) {
+                console.log(`No drivers found for ride ${ride._id}`);
+                // Store notification about no drivers
+                storeRideStatusUpdate(userId, {
+                    type: 'no_drivers',
+                    rideId: ride._id,
+                    message: "No available drivers found for your request.",
+                    timestamp: new Date()
                 });
-
-                // Log the number of drivers notified
-                console.log(`Notified ${nearbyDrivers.length} nearby drivers for emergency request ${ride._id}`);
-            } catch (error) {
-                console.error('Error in driver search and notification process:', error);
-                // Don't throw the error as the request was already created successfully
+            } else {
+                console.log(`Available drivers: ${nearbyDrivers.map(d => d._id).join(', ')}`);
+                // Store notification about found drivers
+                storeRideStatusUpdate(userId, {
+                    type: 'drivers_found',
+                    rideId: ride._id,
+                    driverCount: nearbyDrivers.length,
+                    timestamp: new Date()
+                });
             }
+
+            // Return response with the ride and driver count
+            return res.status(201).json({ 
+                message: 'Emergency request created successfully', 
+                ride,
+                driverCount: nearbyDrivers.length
+            });
 
         } catch (error) {
             console.error('Error creating emergency request:', error.message);
@@ -71,24 +75,13 @@ const RideController = {
 
             const nearbyDrivers = await rideService.findNearbyDrivers(
                 ride.emergencyLocation,
-                ride.serviceType
+                ride.serviceType,
+                ride.emergencyType
             );
-
-            // Notify nearby drivers
-            const io = socketIO.getIO();
-            nearbyDrivers.forEach(driver => {
-                io.to(driver._id.toString()).emit('newEmergencyRequest', {
-                    rideId: ride._id,
-                    emergencyLocation: ride.emergencyLocation,
-                    serviceType: ride.serviceType,
-                    emergencyType: ride.emergencyType,
-                    description: ride.description
-                });
-            });
 
             return res.status(200).json({
                 message: 'Nearby drivers found',
-                nearbyDrivers: nearbyDrivers.length,
+                count: nearbyDrivers.length,
                 drivers: nearbyDrivers
             });
 
@@ -109,11 +102,12 @@ const RideController = {
                 return res.status(404).json({ error: 'Emergency request not found or already accepted' });
             }
 
-            // Notify all drivers in the ride room that it was accepted
-            const io = socketIO.getIO();
-            io.to(`ride_${rideId}`).emit('emergencyRequestAccepted', {
+            // Store the ride acceptance notification for the user to poll
+            storeRideStatusUpdate(ride.user, {
+                type: 'ride_accepted',
                 rideId,
-                acceptedBy: captainId
+                captainId,
+                timestamp: new Date()
             });
 
             return res.status(200).json({ 
@@ -147,7 +141,55 @@ const RideController = {
             console.error('Error starting emergency response:', error.message);
             return res.status(400).json({ error: error.message });
         }
+    },
+
+    // New API endpoint for users to check for ride status updates
+    getRideStatusUpdates: async (req, res) => {
+        try {
+            const userId = req.user.id;
+            const updates = getRideStatusUpdatesForUser(userId);
+
+            return res.status(200).json({
+                updates
+            });
+        } catch (error) {
+            console.error('Error getting ride status updates:', error.message);
+            return res.status(500).json({ error: error.message || 'Internal server error' });
+        }
     }
 };
 
+/**
+ * Store a ride status update for a user to poll
+ */
+function storeRideStatusUpdate(userId, update) {
+    if (!rideStatusUpdates.has(userId)) {
+        rideStatusUpdates.set(userId, []);
+    }
+    
+    rideStatusUpdates.get(userId).push(update);
+    
+    // Limit the number of stored updates per user
+    const userUpdates = rideStatusUpdates.get(userId);
+    if (userUpdates.length > 50) {
+        // Keep only the 50 most recent updates
+        rideStatusUpdates.set(userId, userUpdates.slice(-50));
+    }
+}
+
+/**
+ * Get ride status updates for a user
+ */
+function getRideStatusUpdatesForUser(userId) {
+    if (!rideStatusUpdates.has(userId)) {
+        return [];
+    }
+    
+    // Return updates and clear them
+    const updates = rideStatusUpdates.get(userId);
+    rideStatusUpdates.set(userId, []);
+    return updates;
+}
+
+// Export the controller
 module.exports = RideController;
