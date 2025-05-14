@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-native';
 import { useRouter } from "expo-router";
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,19 +8,16 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
   const [rideStatus, setRideStatus] = useState(emergencyData?.status || 'pending');
   const [userData] = useState({
     name: emergencyData?.userName || 'Emergency User',
-    mobile: emergencyData?.user?.mobile || null,
     email: emergencyData?.user?.email || null
   });
   const router = useRouter();
 
-  // Debug log to see the structure
   useEffect(() => {
     console.log('[POPUP] Full emergency data:', JSON.stringify(emergencyData, null, 2));
-    console.log('[POPUP] User mobile:', userData.mobile);
   }, [emergencyData]);
 
   const handlePhonePress = () => {
-    const mobileNumber = emergencyData?.user?.mobile || userData.mobile;
+    const mobileNumber = emergencyData?.user?.mobile;
     if (mobileNumber) {
       Linking.openURL(`tel:${mobileNumber}`);
     } else {
@@ -54,30 +51,16 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
           }
         );
 
-        console.log('[POPUP] Status updates response:', response.data);
-
         if (response.data?.updates) {
-          // Find relevant updates for this ride
           const rideUpdates = response.data.updates.filter(
             update => update.rideId === emergencyData.rideId
           );
 
           if (rideUpdates.length > 0) {
-            // Get the most recent update
             const latestUpdate = rideUpdates[rideUpdates.length - 1];
-            
-            // Update status based on update type
             switch (latestUpdate.type) {
               case 'ride_accepted':
                 setRideStatus('accepted');
-                // Update user data if available in the update
-                if (latestUpdate.userData) {
-                  setUserData({
-                    name: latestUpdate.userData.name || userData.name,
-                    mobile: latestUpdate.userData.mobile || userData.mobile,
-                    email: latestUpdate.userData.email || userData.email
-                  });
-                }
                 break;
               case 'ride_started':
                 setRideStatus('started');
@@ -85,34 +68,24 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
               case 'no_drivers':
               case 'no_driver_accepted':
                 setRideStatus('no_driver');
-                onClose(); // Close popup if no drivers available
+                onClose();
                 break;
               default:
-                // Keep existing status
                 break;
             }
           }
         }
       } catch (error) {
-        console.error('[POPUP] Error polling ride status:', {
-          status: error.response?.status,
-          data: error.response?.data,
-          url: error.config?.url,
-          message: error.message
-        });
+        console.error('[POPUP] Error polling ride status:', error);
       }
     };
 
     const statusInterval = setInterval(pollRideStatus, 5000);
-    
-    // Initial poll
     pollRideStatus();
-
     return () => clearInterval(statusInterval);
   }, [emergencyData?.rideId]);
 
   if (!emergencyData) {
-    console.log('[POPUP] No emergency data provided');
     return null;
   }
 
@@ -139,25 +112,6 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
                 Status: {rideStatus}
               </Text>
             </View>
-            
-            {/* User Contact Information */}
-            <View style={styles.contactInfo}>
-              <TouchableOpacity 
-                style={styles.contactItem}
-                onPress={handlePhonePress}
-              >
-                <Text style={styles.icon}>📱</Text>
-                <Text style={styles.contactText}>
-                  {emergencyData?.user?.mobile || 'No phone number available'}
-                </Text>
-              </TouchableOpacity>
-              {userData.email && (
-                <View style={styles.contactItem}>
-                  <Text style={styles.icon}>✉️</Text>
-                  <Text style={styles.contactText}>{userData.email}</Text>
-                </View>
-              )}
-            </View>
           </View>
         </View>
       </View>
@@ -173,6 +127,18 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
                 `${emergencyData.emergencyLocation.coordinates[1].toFixed(4)}, ${emergencyData.emergencyLocation.coordinates[0].toFixed(4)}` : 
                 'Location not specified')}
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.icon}>📱</Text>
+          <View>
+            <Text style={styles.detailTitle}>Contact Number</Text>
+            <TouchableOpacity onPress={handlePhonePress}>
+              <Text style={[styles.detailSubtitle, styles.phoneNumber]}>
+                {emergencyData?.user?.mobile || 'No phone number available'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -246,22 +212,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  contactInfo: {
-    marginTop: 8,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 8,
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  contactText: {
-    fontSize: 14,
-    color: '#007AFF',
-    marginLeft: 8,
-  },
   statusBadge: {
     fontSize: 14,
     color: '#666',
@@ -300,6 +250,10 @@ const styles = StyleSheet.create({
     color: '#333',
     marginTop: 2,
     fontSize: 14,
+  },
+  phoneNumber: {
+    color: '#007AFF',
+    textDecorationLine: 'underline',
   },
   buttonContainer: {
     flexDirection: 'row',
