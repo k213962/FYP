@@ -218,18 +218,9 @@ Vehicle Type Filter: ${vehicleType}
         console.log('MongoDB query:', JSON.stringify(query, null, 2));
 
         // Try a simpler location query to see if any captains are within range
-        const baseCaptainsNearby = await Captain.find({
-            status: 'Online',
-            location: {
-                $near: {
-                    $geometry: {
-                        type: 'Point',
-                        coordinates: coordinates
-                    },
-                    $maxDistance: maxDistance * 1000 // Convert km to meters
-                }
-            }
-        }).limit(limit);
+        const baseCaptainsNearby = await Captain.find(query)
+            .select('_id fullname phone vehicleType vehicleNoPlate location rating')
+            .limit(limit);
         
         console.log(`Captains nearby (without vehicle type filter): ${baseCaptainsNearby.length}`);
 
@@ -294,68 +285,151 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return distance;
 }
 
+// Add new method to get nearby pending rides for a captain
+module.exports.getNearbyPendingRides = async (longitude, latitude, maxDistance = 5, captainVehicleType = null) => {
+    try {
+        console.log(`Finding pending rides near [${longitude}, ${latitude}] for ${captainVehicleType || 'any'} vehicle type`);
+        
+        // Basic validation
+        if (!longitude || !latitude) {
+            console.error('Invalid coordinates provided');
+            return [];
+        }
+        
+        // Build query for pending rides
+        const query = {
+            status: 'pending',
+            'emergencyLocation.coordinates': {
+                $near: {
+                    $geometry: {
+                        type: 'Point',
+                        coordinates: [longitude, latitude]
+                    },
+                    $maxDistance: maxDistance * 1000 // Convert km to meters
+                }
+            }
+        };
+        
+        // Add service type filter if captain's vehicle type is specified
+        if (captainVehicleType) {
+            // Convert vehicle type to service type if needed
+            let serviceType = captainVehicleType;
+            query.serviceType = serviceType;
+        }
+        
+        console.log('Searching for pending rides with query:', JSON.stringify(query, null, 2));
+        
+        // Find pending rides matching the criteria
+        const pendingRides = await rideModel.find(query)
+            .select('_id user emergencyLocation emergencyType serviceType description status createdAt')
+            .populate('user', 'firstname lastname phone email')
+            .limit(10); // Limit to 10 rides
+        
+        console.log(`Found ${pendingRides.length} pending rides nearby`);
+        
+        // Calculate and add distance for each ride
+        const ridesWithDistance = pendingRides.map(ride => {
+            const distanceInKm = calculateDistance(
+                latitude, // captain latitude
+                longitude, // captain longitude
+                ride.emergencyLocation.coordinates[1], // ride latitude
+                ride.emergencyLocation.coordinates[0]  // ride longitude
+            ) / 1000; // Convert meters to km
+            
+            return {
+                ...ride.toObject(),
+                distance: parseFloat(distanceInKm.toFixed(2))
+            };
+        });
+        
+        // Sort by distance (closest first)
+        ridesWithDistance.sort((a, b) => a.distance - b.distance);
+        
+        return ridesWithDistance;
+    } catch (error) {
+        console.error('Error finding nearby pending rides:', error);
+        return [];
+    }
+};
+
 module.exports.getRideById = async (rideId) => {
     try {
-        const ride = await rideModel.findById(rideId);
-        if (!ride) {
-            throw new Error('Emergency request not found');
-        }
+        const ride = await rideModel.findById(rideId)
+            .populate('user', 'firstname lastname phone email')
+            .populate('captain', 'firstname lastname phone vehicleType vehicleNoPlate');
+        
         return ride;
     } catch (error) {
-        console.error('Error finding emergency request:', error);
-        throw error;
+        console.error(`Error getting ride ${rideId}:`, error);
+        return null;
     }
 };
 
 module.exports.acceptRide = async (rideId, captainId) => {
-    const ride = await rideModel.findOneAndUpdate(
-        { 
-            _id: rideId,
-            status: 'pending'
-        },
-        {
-            $set: {
+    try {
+        console.log(`Captain ${captainId} attempting to accept ride ${rideId}`);
+        
+        // Check if ride exists and is still pending
+        const ride = await rideModel.findById(rideId);
+        
+        if (!ride) {
+            throw new Error('Ride not found');
+        }
+        
+        if (ride.status !== 'pending') {
+            throw new Error(`Ride has already been ${ride.status}`);
+        }
+        
+        // Update ride status and assign captain
+        const updatedRide = await rideModel.findByIdAndUpdate(
+            rideId,
+            {
                 status: 'accepted',
-                acceptedBy: captainId,
                 captain: captainId,
                 acceptedAt: new Date()
-            }
-        },
-        { new: true }
-    );
-
-    if (!ride) {
-        throw new Error('Emergency request not available or already accepted');
+            },
+            { new: true }
+        ).populate('user', 'firstname lastname phone email')
+          .populate('captain', 'firstname lastname phone vehicleType vehicleNoPlate');
+        
+        console.log(`Ride ${rideId} accepted by captain ${captainId}`);
+        
+        return updatedRide;
+    } catch (error) {
+        console.error(`Error accepting ride ${rideId}:`, error);
+        throw error;
     }
-
-    // Update captain status to busy
-    await Captain.findByIdAndUpdate(captainId, { 
-        status: 'Offline',
-        currentEmergency: rideId
-    });
-
-    return ride;
 };
 
 module.exports.startRide = async (rideId, captainId) => {
-    const ride = await rideModel.findOneAndUpdate(
-        {
+    try {
+        // Check if ride exists and is accepted by this captain
+        const ride = await rideModel.findOne({
             _id: rideId,
             captain: captainId,
             status: 'accepted'
-        },
-        {
-            $set: {
-                status: 'in-progress',
+        });
+        
+        if (!ride) {
+            throw new Error('Ride not found or not accepted yet');
+        }
+        
+        // Update ride status
+        const updatedRide = await rideModel.findByIdAndUpdate(
+            rideId,
+            {
+                status: 'in_progress',
                 startedAt: new Date()
-            }
-        },
-        { new: true }
-    );
-
-    if (!ride) {
-        throw new Error('Invalid emergency request or captain');
+            },
+            { new: true }
+        ).populate('user', 'firstname lastname phone email')
+          .populate('captain', 'firstname lastname phone vehicleType vehicleNoPlate');
+        
+        console.log(`Ride ${rideId} started by captain ${captainId}`);
+        
+        return updatedRide;
+    } catch (error) {
+        console.error(`Error starting ride ${rideId}:`, error);
+        throw error;
     }
-
-    return ride;
 };

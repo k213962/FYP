@@ -481,3 +481,229 @@ exports.startLocationTracking = async (captainId, locationData) => {
         throw error;
     }
 };
+
+/**
+ * Get captain by ID
+ * @param {string} captainId - Captain ID
+ */
+exports.getCaptainById = async (captainId) => {
+    try {
+        const captain = await Captain.findById(captainId);
+        return captain;
+    } catch (error) {
+        console.error(`Error getting captain ${captainId}:`, error);
+        return null;
+    }
+};
+
+/**
+ * Update captain status
+ * @param {string} captainId - Captain ID
+ * @param {string} status - New status ('Online' or 'Offline')
+ */
+exports.updateCaptainStatus = async (captainId, status) => {
+    try {
+        if (status !== 'Online' && status !== 'Offline') {
+            throw new Error('Invalid status. Status should be either Online or Offline');
+        }
+
+        const captain = await Captain.findByIdAndUpdate(
+            captainId,
+            { status },
+            { new: true }
+        );
+
+        if (!captain) {
+            throw new Error('Captain not found');
+        }
+
+        return captain;
+    } catch (error) {
+        console.error(`Error updating captain ${captainId} status:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Update captain location
+ * @param {string} captainId - Captain ID
+ * @param {Object} location - Location object with latitude and longitude
+ */
+exports.updateCaptainLocation = async (captainId, location) => {
+    try {
+        if (!location || !location.latitude || !location.longitude) {
+            throw new Error('Invalid location data');
+        }
+
+        // Format the location as a GeoJSON Point
+        const geoJSONLocation = {
+            type: 'Point',
+            coordinates: [location.longitude, location.latitude],
+            lastUpdated: new Date()
+        };
+
+        const captain = await Captain.findByIdAndUpdate(
+            captainId,
+            { location: geoJSONLocation },
+            { new: true }
+        );
+
+        if (!captain) {
+            throw new Error('Captain not found');
+        }
+
+        return captain;
+    } catch (error) {
+        console.error(`Error updating captain ${captainId} location:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Get captain location
+ * @param {string} captainId - Captain ID
+ */
+exports.getCaptainLocation = async (captainId) => {
+    try {
+        const captain = await Captain.findById(captainId).select('location');
+        
+        if (!captain) {
+            throw new Error('Captain not found');
+        }
+
+        return captain.location;
+    } catch (error) {
+        console.error(`Error getting captain ${captainId} location:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Get online captains
+ * @param {string} vehicleType - Optional vehicle type filter
+ */
+exports.getOnlineCaptains = async (vehicleType = null) => {
+    try {
+        let query = { status: 'Online' };
+        
+        if (vehicleType) {
+            query.vehicleType = vehicleType;
+        }
+        
+        const captains = await Captain.find(query)
+            .select('_id fullname phone vehicleType vehicleNoPlate location');
+            
+        return captains;
+    } catch (error) {
+        console.error('Error getting online captains:', error);
+        throw error;
+    }
+};
+
+/**
+ * Start location tracking for a captain
+ * @param {string} captainId - Captain ID
+ * @param {Object} location - Initial location
+ */
+exports.startLocationTracking = async (captainId, location) => {
+    try {
+        if (!location || !location.latitude || !location.longitude) {
+            throw new Error('Invalid location data');
+        }
+
+        // Format the location as a GeoJSON Point
+        const geoJSONLocation = {
+            type: 'Point',
+            coordinates: [location.longitude, location.latitude],
+            lastUpdated: new Date()
+        };
+
+        const captain = await Captain.findByIdAndUpdate(
+            captainId,
+            { 
+                location: geoJSONLocation,
+                trackingStarted: new Date(),
+                isTracking: true
+            },
+            { new: true }
+        );
+
+        if (!captain) {
+            throw new Error('Captain not found');
+        }
+
+        return {
+            message: 'Location tracking started',
+            captain: {
+                id: captain._id,
+                location: captain.location
+            }
+        };
+    } catch (error) {
+        console.error(`Error starting location tracking for captain ${captainId}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Validate all captain locations to ensure data consistency
+ */
+exports.validateAllCaptainLocations = async () => {
+    try {
+        const captains = await Captain.find();
+        const results = {
+            total: captains.length,
+            valid: 0,
+            fixed: 0,
+            invalid: 0,
+            details: []
+        };
+
+        for (const captain of captains) {
+            const detail = {
+                captainId: captain._id,
+                email: captain.email,
+                status: 'valid',
+                message: 'Location is valid',
+                originalLocation: captain.location
+            };
+
+            if (!captain.location || !captain.location.coordinates) {
+                detail.status = 'invalid';
+                detail.message = 'No location data';
+                results.invalid++;
+            } else {
+                const [lng, lat] = captain.location.coordinates;
+                
+                if (typeof lng !== 'number' || typeof lat !== 'number') {
+                    detail.status = 'invalid';
+                    detail.message = 'Coordinates are not numbers';
+                    results.invalid++;
+                } else if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+                    detail.status = 'fixed';
+                    detail.message = 'Coordinates out of valid range, reset to default';
+                    detail.fixedCoordinates = [67.0011, 24.8607]; // Default to Karachi
+                    
+                    // Fix the captain location
+                    captain.location = {
+                        type: 'Point',
+                        coordinates: [67.0011, 24.8607],
+                        lastUpdated: new Date()
+                    };
+                    await captain.save();
+                    
+                    results.fixed++;
+                } else {
+                    results.valid++;
+                }
+            }
+            
+            results.details.push(detail);
+        }
+
+        return results;
+    } catch (error) {
+        console.error('Error validating captain locations:', error);
+        throw error;
+    }
+}

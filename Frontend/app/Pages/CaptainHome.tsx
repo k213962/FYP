@@ -61,11 +61,13 @@ const Home = () => {
     longitudeDelta: 0.05,
   });
   const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const popupAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
   // Add a useRef for tracking first render
-  const isFirstRender = React.useRef(true);
+  const isFirstRender = useRef(true);
 
   // Function to update status in database
   const updateDriverStatusInDB = async (newStatus: string) => {
@@ -136,7 +138,7 @@ const Home = () => {
         } catch (verifyErr) {
           console.error('[STATUS] Error verifying status update:', verifyErr);
         }
-
+        
         return true;
       } else {
         console.error(`[STATUS] Failed to update status. Server response:`, response.data);
@@ -196,7 +198,7 @@ const Home = () => {
     setEmergencyData(formattedData);
     console.log('[REQUEST] Setting showRidePopup to true for ride:', formattedData.rideId);
     setShowRidePopup(true);
-
+    
     // Play a sound alert
     try {
       // Sound code would go here
@@ -205,6 +207,76 @@ const Home = () => {
       console.error('[REQUEST] Error playing alert sound:', error);
     }
   };
+  
+  // Poll for available ride requests
+  const pollForRideRequests = async () => {
+    if (status !== 'Online' || showRidePopup) {
+      return; // Don't poll if offline or already showing a popup
+    }
+    
+    try {
+      console.log('[POLL] Checking for available ride requests...');
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        console.error('[POLL] No authentication token found');
+        return;
+      }
+      
+      const response = await axios.get(`${baseUrl}/notifications/poll`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const { notifications } = response.data;
+      
+      if (notifications && notifications.length > 0) {
+        console.log(`[POLL] Received ${notifications.length} notifications`);
+        
+        // Process only the first notification (latest/closest)
+        const notification = notifications[0];
+        
+        if (notification.type === 'ride_request') {
+          console.log('[POLL] Processing ride request notification:', notification);
+          handleRideRequest(notification);
+        }
+      } else {
+        console.log('[POLL] No new notifications');
+      }
+    } catch (error) {
+      console.error('[POLL] Error polling for notifications:', error);
+    }
+  };
+  
+  // Start polling when status changes to Online
+  useEffect(() => {
+    if (status === 'Online') {
+      console.log('[POLL] Starting notification polling because status is Online');
+      setIsPolling(true);
+      
+      // Poll immediately and then every 5 seconds
+      pollForRideRequests();
+      pollingIntervalRef.current = setInterval(pollForRideRequests, 5000);
+    } else {
+      console.log('[POLL] Stopping notification polling because status is Offline');
+      setIsPolling(false);
+      
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    }
+    
+    // Clean up interval on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [status, showRidePopup]);
 
   // Add a useEffect that watches status changes and updates the database
   useEffect(() => {
@@ -218,6 +290,87 @@ const Home = () => {
     console.log(`[STATUS] Status changed to ${status}, synchronizing with database`);
     updateDriverStatusInDB(status);
   }, [status]);
+  
+  // Set up location tracking
+  useEffect(() => {
+    const startLocationTracking = async () => {
+      try {
+        // Request location permissions
+        const { status: locationPermissionStatus } = await Location.requestForegroundPermissionsAsync();
+        
+        if (locationPermissionStatus !== Location.PermissionStatus.GRANTED) {
+          console.error('[LOCATION] Permission to access location was denied');
+          return;
+        }
+        
+        // Start watching position
+        const subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            distanceInterval: 10, // minimum distance (meters) between updates
+            timeInterval: 5000    // minimum time (ms) between updates
+          },
+          (location) => {
+            const { latitude, longitude } = location.coords;
+            console.log(`[LOCATION] New location: ${latitude}, ${longitude}`);
+            
+            // Update local state
+            setCurrentLocation({
+              latitude,
+              longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05
+            });
+            
+            // Send location to server if captain is online
+            if (status === 'Online') {
+              updateLocationOnServer(latitude, longitude);
+            }
+          }
+        );
+        
+        setLocationSubscription(subscription);
+      } catch (error) {
+        console.error('[LOCATION] Error starting location tracking:', error);
+      }
+    };
+    
+    startLocationTracking();
+    
+    // Clean up on unmount
+    return () => {
+      if (locationSubscription) {
+        locationSubscription.remove();
+      }
+    };
+  }, []);
+  
+  // Function to update location on server
+  const updateLocationOnServer = async (latitude: number, longitude: number) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        console.error('[LOCATION] No authentication token found');
+        return;
+      }
+      
+      await axios.put(
+        `${baseUrl}/captain/location`,
+        { location: { latitude, longitude } },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      console.log('[LOCATION] Location updated on server');
+    } catch (error) {
+      console.error('[LOCATION] Error updating location on server:', error);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -249,6 +402,14 @@ const Home = () => {
           showsUserLocation={true}
           showsMyLocationButton={true}
         />
+        
+        {/* Polling indicator */}
+        {isPolling && (
+          <View style={styles.pollingIndicator}>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.pollingText}>Listening for requests</Text>
+          </View>
+        )}
       </View>
 
       {/* Info Card */}
@@ -354,7 +515,22 @@ const styles = StyleSheet.create({
   statusText: {
     fontWeight: 'bold',
   },
-  // Add Styles for any remaining elements
+  pollingIndicator: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pollingText: {
+    color: '#fff',
+    marginLeft: 8,
+    fontSize: 12,
+  }
 });
 
 export default Home;

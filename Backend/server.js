@@ -6,6 +6,7 @@ const userRoutes = require("./routes/user.routes");
 const captainRoutes = require("./routes/captain.routes");
 const mapRoutes = require("./routes/map.routes");
 const rideRoutes = require("./routes/ride.routes");
+const notificationRoutes = require("./routes/notification.routes");
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use("/user", userRoutes);
 app.use("/captain", captainRoutes);
 app.use("/map", mapRoutes);
 app.use("/rides", rideRoutes);
+app.use("/notifications", notificationRoutes);
 app.use("/test", (req, res) => {
   res.json({ message: "Hello from Express!" });
 });

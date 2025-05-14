@@ -1,8 +1,13 @@
 const rideService = require('../services/ride.service');
+const captainService = require('../services/captain.service');
+const notificationController = require('./notification.controller');
 const { validationResult } = require('express-validator');
 
 // Simplified to store only ride status updates
 const rideStatusUpdates = new Map();
+
+// Store active ride assignments that are in progress
+const activeRideAssignments = new Map();
 
 const RideController = {
     createRide: async (req, res) => {
@@ -31,6 +36,7 @@ const RideController = {
             );
             
             console.log(`\n🚗 Found ${nearbyDrivers.length} nearby drivers for ride ${ride._id}`);
+            
             if (nearbyDrivers.length === 0) {
                 console.log(`No drivers found for ride ${ride._id}`);
                 // Store notification about no drivers
@@ -42,6 +48,7 @@ const RideController = {
                 });
             } else {
                 console.log(`Available drivers: ${nearbyDrivers.map(d => d._id).join(', ')}`);
+                
                 // Store notification about found drivers
                 storeRideStatusUpdate(userId, {
                     type: 'drivers_found',
@@ -49,6 +56,9 @@ const RideController = {
                     driverCount: nearbyDrivers.length,
                     timestamp: new Date()
                 });
+                
+                // Start sending notifications to nearby drivers sequentially
+                await startDriverNotifications(ride, nearbyDrivers);
             }
 
             // Return response with the ride and driver count
@@ -100,6 +110,12 @@ const RideController = {
 
             if (!ride) {
                 return res.status(404).json({ error: 'Emergency request not found or already accepted' });
+            }
+
+            // Cancel any active assignment process for this ride
+            if (activeRideAssignments.has(rideId)) {
+                console.log(`Ride ${rideId} was accepted by captain ${captainId}, cancelling further notifications`);
+                // No need to do anything else, the assignment process will check this status
             }
 
             // Store the ride acceptance notification for the user to poll
@@ -158,6 +174,91 @@ const RideController = {
         }
     }
 };
+
+/**
+ * Start sending notifications to drivers
+ * @param {Object} ride - The ride object
+ * @param {Array} drivers - Array of nearby drivers
+ */
+async function startDriverNotifications(ride, drivers) {
+    console.log(`Starting driver notification process for ride ${ride._id}`);
+    
+    if (drivers.length === 0) {
+        console.log(`No drivers available for ride ${ride._id}`);
+        return;
+    }
+    
+    // Store active assignment process
+    activeRideAssignments.set(ride._id.toString(), {
+        currentDriverIndex: 0,
+        drivers,
+        ride,
+        startTime: new Date()
+    });
+    
+    // Send notification to the first driver
+    await sendNotificationToNextDriver(ride._id.toString());
+}
+
+/**
+ * Send notification to the next driver in the queue
+ * @param {string} rideId - The ride ID
+ */
+async function sendNotificationToNextDriver(rideId) {
+    const assignment = activeRideAssignments.get(rideId);
+    
+    if (!assignment) {
+        console.log(`No active assignment found for ride ${rideId}`);
+        return;
+    }
+    
+    // Check if ride has been accepted already
+    const currentRide = await rideService.getRideById(rideId);
+    if (currentRide && currentRide.status !== 'pending') {
+        console.log(`Ride ${rideId} is no longer pending (${currentRide.status}), stopping notification process`);
+        activeRideAssignments.delete(rideId);
+        return;
+    }
+    
+    if (assignment.currentDriverIndex >= assignment.drivers.length) {
+        console.log(`All ${assignment.drivers.length} drivers have been notified for ride ${rideId}`);
+        activeRideAssignments.delete(rideId);
+        
+        // Notify user that no drivers accepted
+        const ride = assignment.ride;
+        storeRideStatusUpdate(ride.user, {
+            type: 'no_driver_accepted',
+            rideId,
+            message: "No drivers accepted your request.",
+            timestamp: new Date()
+        });
+        
+        return;
+    }
+    
+    const currentDriver = assignment.drivers[assignment.currentDriverIndex];
+    console.log(`Sending notification to driver ${currentDriver._id} for ride ${rideId}`);
+    
+    // Push the ride request to the driver's notification queue
+    await notificationController.pushRideRequest(currentDriver._id, assignment.ride);
+    
+    // Increment the index for next time
+    assignment.currentDriverIndex++;
+    activeRideAssignments.set(rideId, assignment);
+    
+    // Schedule next driver notification in 15 seconds if ride not accepted
+    setTimeout(async () => {
+        // Check again if ride has been accepted
+        const updatedRide = await rideService.getRideById(rideId);
+        if (updatedRide && updatedRide.status === 'pending') {
+            console.log(`No response from driver ${currentDriver._id} for ride ${rideId}, trying next driver`);
+            await sendNotificationToNextDriver(rideId);
+        } else {
+            console.log(`Ride ${rideId} has been accepted, no need to notify more drivers`);
+            activeRideAssignments.delete(rideId);
+        }
+    }, 15000); // 15 seconds timeout
+}
 
 /**
  * Store a ride status update for a user to poll
