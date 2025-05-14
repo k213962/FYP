@@ -376,38 +376,42 @@ module.exports.getRideById = async (rideId) => {
     }
 };
 
-module.exports.acceptRide = async (rideId, captainId) => {
+module.exports.acceptRide = async (rideId, captainId, updateData) => {
     try {
-        console.log(`Captain ${captainId} attempting to accept ride ${rideId}`);
-        
-        // Check if ride exists and is still pending
-        const ride = await rideModel.findById(rideId);
-        
+        // Find the ride and make sure it's still pending
+        const ride = await rideModel.findOne({ 
+            _id: rideId,
+            status: 'pending'
+        });
+
         if (!ride) {
-            throw new Error('Ride not found');
+            throw new Error('Ride not found or already accepted');
         }
-        
-        if (ride.status !== 'pending') {
-            throw new Error(`Ride has already been ${ride.status}`);
-        }
-        
-        // Update ride status and assign captain
+
+        // Update the ride with captain info and new status
         const updatedRide = await rideModel.findByIdAndUpdate(
             rideId,
             {
-                status: 'accepted',
-                captain: captainId,
-                acceptedAt: new Date()
+                $set: {
+                    captain: captainId,
+                    status: 'ongoing',
+                    acceptedAt: new Date(),
+                    ...updateData
+                }
             },
             { new: true }
-        ).populate('user', 'firstname lastname phone email')
-          .populate('captain', 'firstname lastname phone vehicleType vehicleNoPlate');
-        
-        console.log(`Ride ${rideId} accepted by captain ${captainId}`);
-        
+        ).populate('user')
+        .populate('captain', 'fullname phone vehicleType vehicleNoPlate location rating');
+
+        if (!updatedRide) {
+            throw new Error('Failed to update ride');
+        }
+
+        console.log(`✅ Ride ${rideId} accepted by captain ${captainId}`);
         return updatedRide;
+
     } catch (error) {
-        console.error(`Error accepting ride ${rideId}:`, error);
+        console.error('Error in acceptRide service:', error);
         throw error;
     }
 };

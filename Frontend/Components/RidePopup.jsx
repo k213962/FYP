@@ -143,6 +143,16 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
         </View>
 
         <View style={styles.detailRow}>
+          <Text style={styles.icon}>📧</Text>
+          <View>
+            <Text style={styles.detailTitle}>Email Address</Text>
+            <Text style={[styles.detailSubtitle, styles.emailText]}>
+              {emergencyData?.user?.email || 'No email available'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.detailRow}>
           <Text style={styles.icon}>⏰</Text>
           <View>
             <Text style={styles.detailTitle}>Request Time</Text>
@@ -254,6 +264,9 @@ const styles = StyleSheet.create({
   phoneNumber: {
     color: '#007AFF',
     textDecorationLine: 'underline',
+  },
+  emailText: {
+    color: '#007AFF',
   },
   buttonContainer: {
     flexDirection: 'row',

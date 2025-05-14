@@ -173,9 +173,9 @@ const CaptainRiding = () => {
         {ride.user && (
           <View style={styles.userInfoContainer}>
             <Text style={styles.sectionTitle}>User Information</Text>
-            <Text style={styles.detailText}>
+          <Text style={styles.detailText}>
               Name: {ride.user.firstname} {ride.user.lastname}
-            </Text>
+          </Text>
             {ride.user.phone && (
               <TouchableOpacity>
                 <Text style={styles.phoneText}>Phone: {ride.user.phone}</Text>

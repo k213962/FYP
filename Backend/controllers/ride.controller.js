@@ -2,6 +2,7 @@ const rideService = require('../services/ride.service');
 const captainService = require('../services/captain.service');
 const notificationController = require('./notification.controller');
 const { validationResult } = require('express-validator');
+const config = require('../config');
 
 // Store ride status updates for users
 const rideStatusUpdates = new Map();
@@ -105,38 +106,74 @@ const RideController = {
             const { rideId } = req.params;
             const captainId = req.user.id;
 
-            const ride = await rideService.acceptRide(rideId, captainId);
+            // First, check if the captain is already busy
+            const captain = await captainService.getCaptainById(captainId);
+            if (captain.status === 'busy') {
+                return res.status(400).json({ 
+                    error: 'Captain is already on another ride',
+                    message: 'Please complete your current ride before accepting a new one'
+                });
+            }
+
+            // Start a transaction or atomic operation
+            try {
+                // 1. Update captain status to busy
+                await captainService.updateCaptainStatus(captainId, 'busy');
+
+                // 2. Update ride with captain info and status
+                const ride = await rideService.acceptRide(rideId, captainId, {
+                    status: 'ongoing',
+                    captain: captainId,
+                    acceptedAt: new Date()
+                });
 
             if (!ride) {
-                return res.status(404).json({ error: 'Emergency request not found or already accepted' });
-            }
-
-            // Cancel polling for this ride
-            if (activeRides.has(rideId)) {
-                const rideInfo = activeRides.get(rideId);
-                if (rideInfo.timer) {
-                    clearTimeout(rideInfo.timer);
+                    // Rollback captain status if ride update fails
+                    await captainService.updateCaptainStatus(captainId, 'available');
+                    return res.status(404).json({ 
+                        error: 'Emergency request not found or already accepted' 
+                    });
                 }
-                rideInfo.accepted = true;
-                activeRides.set(rideId, rideInfo);
-            }
 
-            // Store acceptance notification
-            storeRideStatusUpdate(ride.user, {
-                type: 'ride_accepted',
-                rideId,
-                captainId,
-                timestamp: new Date()
-            });
+                // 3. Stop polling by removing from active assignments
+                if (activeRides.has(rideId)) {
+                    console.log(`Ride ${rideId} was accepted by captain ${captainId}, cancelling further notifications`);
+                    activeRides.delete(rideId);
+                    await removePersistedAssignment(rideId);
+                }
 
+                // 4. Store ride acceptance notification
+                storeRideStatusUpdate(ride.user, {
+                    type: 'ride_accepted',
+                    rideId,
+                    captainId,
+                    timestamp: new Date()
+                });
+
+                // 5. Send success response with updated ride info
             return res.status(200).json({ 
                 message: 'Emergency request accepted successfully',
-                ride
-            });
+                    ride,
+                    captain: {
+                        id: captain._id,
+                        name: captain.name,
+                        phone: captain.phone,
+                        vehicle: captain.vehicle
+                    }
+                });
+
+            } catch (error) {
+                // If anything fails, try to rollback captain status
+                await captainService.updateCaptainStatus(captainId, 'available');
+                throw error; // Re-throw to be caught by outer catch block
+            }
 
         } catch (error) {
             console.error('Error accepting emergency request:', error.message);
-            return res.status(400).json({ error: error.message });
+            return res.status(500).json({ 
+                error: 'Failed to accept emergency request',
+                message: error.message 
+            });
         }
     },
 
@@ -308,9 +345,9 @@ async function pollNextDriver(rideId) {
     
     if (!ride || ride.accepted) {
         console.log(`Ride ${rideId} is already accepted or not found`);
-        return;
-    }
-    
+                return;
+            }
+            
     // Check if we've gone through all drivers
     if (ride.currentIndex >= ride.drivers.length) {
         console.log(`All ${ride.drivers.length} drivers have been polled for ride ${rideId}`);
@@ -337,9 +374,9 @@ async function pollNextDriver(rideId) {
     if (!rideDetails || rideDetails.status !== 'pending') {
         console.log(`Ride ${rideId} is no longer pending, stopping polling`);
         activeRides.delete(rideId);
-        return;
-    }
-    
+            return;
+        }
+        
     // Store the request in the driver's queue (will be retrieved when driver polls)
     notificationController.pushRideRequest(currentDriver._id, rideDetails);
     

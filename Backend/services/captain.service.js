@@ -79,30 +79,33 @@ exports.loginCaptain = async (email, password) => {
     }
 };
 
-exports.updateCaptainStatus = async (captainId, status, locationData = null) => {
+exports.updateCaptainStatus = async (captainId, status) => {
     try {
-        console.log(`\nUpdating status for captain ${captainId} to: ${status}`);
-
-        if (!['Online', 'Offline', 'Busy'].includes(status)) {
-            console.log('Status update failed: Invalid status');
-            throw new Error('Invalid status');
+        // Validate status
+        const validStatuses = ['available', 'busy', 'offline', 'online'];
+        if (!validStatuses.includes(status.toLowerCase())) {
+            throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
         }
 
-        const captain = await Captain.findById(captainId);
-        if (!captain) {
-            console.log('Status update failed: Captain not found');
-            throw new Error('Captain not found');
-        }
-
-        // Update captain with new status
+        // Update captain status
         const updatedCaptain = await Captain.findByIdAndUpdate(
             captainId,
-            { status },
+            {
+                $set: {
+                    status: status.toLowerCase(),
+                    lastStatusUpdate: new Date()
+                }
+            },
             { new: true }
         );
 
-        console.log(`Successfully updated captain ${captainId} status to: ${status}`);
+        if (!updatedCaptain) {
+            throw new Error('Captain not found');
+        }
+
+        console.log(`✅ Captain ${captainId} status updated to ${status}`);
         return updatedCaptain;
+
     } catch (error) {
         console.error('Error updating captain status:', error);
         throw error;

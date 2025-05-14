@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, AppState } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, AppState, Switch } from 'react-native';
 import { getLoggedInCaptain } from '../app/utils/captainUtils';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -24,11 +24,13 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
   const [captainData, setCaptainData] = useState<CaptainData | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStatus, setCurrentStatus] = useState('Offline');
+  const [isOnline, setIsOnline] = useState(false);
 
   const syncWithParentStatus = () => {
     if (propStatus !== currentStatus) {
-      console.log(`[CARD] Syncing status with parent: ${propStatus}`);
-      setCurrentStatus(propStatus);
+      console.log(`[CARD] Syncing status with parent: Offline`);
+      setCurrentStatus('Offline');
+      setIsOnline(false);
     }
   };
 
@@ -38,10 +40,11 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
       if (data) {
         const formattedData = {
           ...data,
-          status: data.status || 'Offline'
+          status: 'Offline' // Always set to Offline
         };
         setCaptainData(formattedData);
-        setCurrentStatus(formattedData.status || 'Offline');
+        setCurrentStatus('Offline');
+        setIsOnline(false);
       }
     } catch (error) {
       console.error('Error fetching captain data:', error);
@@ -62,44 +65,39 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
       const newStatus = currentStatus === 'Online' ? 'Offline' : 'Online';
       console.log('[CARD] Changing captain status from', currentStatus, 'to', newStatus);
       
-      // Use XMLHttpRequest for more reliable updates
-      const xhr = new XMLHttpRequest();
-      xhr.open('PATCH', `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`, true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      setLoading(true);
       
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
-          console.log('[CARD] Status update response code:', xhr.status);
-          console.log('[CARD] Status update response:', xhr.responseText);
-          
-          if (xhr.status >= 200 && xhr.status < 300) {
-            console.log('[CARD] Status successfully changed to', newStatus);
-            
-            // Update local state
-            setCurrentStatus(newStatus);
-            
-            // Call the parent's toggleStatus to ensure parent component is aware
-            toggleStatus();
-            
-            // Refetch to ensure data is updated
-            setTimeout(fetchCaptainData, 1000);
-            
-            Alert.alert('Success', `Status changed to ${newStatus}`);
-          } else {
-            console.error('[CARD] Failed to update status:', xhr.responseText);
-            Alert.alert('Error', 'Failed to update status. Please try again.');
+      const response = await axios.patch(
+        `${process.env.EXPO_PUBLIC_BASE_URL}/captain/status`,
+        { status: newStatus },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           }
         }
-      };
-      
-      const payload = JSON.stringify({ status: newStatus });
-      console.log('[CARD] Sending payload:', payload);
-      
-      xhr.send(payload);
+      );
+
+      if (response.status >= 200 && response.status < 300) {
+        console.log('[CARD] Status successfully changed to', newStatus);
+        setCurrentStatus(newStatus);
+        setIsOnline(newStatus === 'Online');
+        toggleStatus();
+        
+        Alert.alert(
+          'Status Updated',
+          `You are now ${newStatus}. ${newStatus === 'Online' ? 'You can now receive emergency requests.' : 'You will not receive any emergency requests.'}`
+        );
+      } else {
+        throw new Error('Failed to update status');
+      }
     } catch (error) {
       console.error('[CARD] Error updating status:', error);
-      Alert.alert('Error', 'Failed to update status');
+      Alert.alert('Error', 'Failed to update status. Please try again.');
+      // Revert the switch if there was an error
+      setIsOnline(currentStatus === 'Online');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -146,16 +144,24 @@ const CaptainInfoCard = ({ status: propStatus, toggleStatus }: CaptainInfoCardPr
 
       <View style={[styles.rowBetween, { marginTop: 20 }]}>
         <View>
-          <Text style={[styles.statusText, { color: currentStatus === 'Online' ? 'green' : 'red' }]}>
+          <Text style={[styles.statusText, { color: isOnline ? '#10b981' : '#ef4444' }]}>
             {currentStatus}
           </Text>
           <Text style={styles.label}>Responder Status</Text>
         </View>
-        <TouchableOpacity style={styles.statusBtn} onPress={handleStatusToggle}>
-          <Text style={styles.statusBtnText}>
-            {currentStatus === 'Online' ? 'Go Offline' : 'Go Online'}
+        <View style={styles.toggleContainer}>
+          <Switch
+            trackColor={{ false: '#ef4444', true: '#10b981' }}
+            thumbColor={isOnline ? '#fff' : '#fff'}
+            ios_backgroundColor="#ef4444"
+            onValueChange={handleStatusToggle}
+            value={isOnline}
+            disabled={loading}
+          />
+          <Text style={[styles.toggleLabel, { color: isOnline ? '#10b981' : '#ef4444' }]}>
+            {isOnline ? 'Online' : 'Offline'}
           </Text>
-        </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -207,15 +213,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  statusBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    backgroundColor: '#1e40af',
-    borderRadius: 16,
+  toggleContainer: {
+    alignItems: 'center',
   },
-  statusBtnText: {
-    color: 'white',
+  toggleLabel: {
+    fontSize: 12,
     fontWeight: '600',
-    fontSize: 13,
+    marginTop: 4,
   }
 });

@@ -127,11 +127,18 @@ const Home = () => {
       console.log('[REQUEST] Already showing a ride popup, not showing another');
       return;
     }
-
+      
     // Basic validation - only check essential fields
     if (!data || !data.rideId || !data.emergencyLocation?.coordinates) {
       console.error('[REQUEST] Missing required fields in ride request:', data);
       return;
+    }
+
+    // Stop polling while showing the request
+    setIsPolling(false);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
     }
 
     // Format and store the emergency data
@@ -168,7 +175,7 @@ const Home = () => {
       console.log('[POLL] Captain is offline, skipping poll');
       return;
     }
-    
+
     if (showRidePopup) {
       console.log('[POLL] Already showing ride popup, skipping poll');
       return;
@@ -211,32 +218,59 @@ const Home = () => {
         return;
       }
       
-      // Send response to server
-      await axios.post(`${baseUrl}/rides/respond`, {
-        rideId: emergencyData.rideId,
-        response: response
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
       if (response === 'accept') {
-        // Handle accepted ride
-        console.log('[RESPONSE] Ride accepted');
-        setShowRidePopup(false);
-        setEmergencyData(null);
+        // Accept the ride and update captain status
+        const acceptResponse = await axios.post(
+          `${baseUrl}/rides/${emergencyData.rideId}/accept`,
+          {},
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (acceptResponse.status === 200) {
+          console.log('[RESPONSE] Ride accepted successfully');
+          // Update local status to busy
+          setStatus('Busy');
+          // Stop polling for new requests
+          setIsPolling(false);
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          // Navigate to the riding screen
+          router.push(`/Pages/CaptainRiding?rideId=${emergencyData.rideId}`);
+        }
       } else {
-        // Handle declined ride
-        console.log('[RESPONSE] Ride declined');
-        setShowRidePopup(false);
-        setEmergencyData(null);
+        // If declined, resume polling if status is still Online
+        if (status === 'Online') {
+          console.log('[RESPONSE] Resuming polling after decline');
+          setIsPolling(true);
+          pollForRideRequests();
+          pollingIntervalRef.current = setInterval(pollForRideRequests, 5000);
+        }
       }
-    } catch (error) {
-      console.error('[RESPONSE] Error responding to ride:', error);
+      
+      // Clear the popup in any case
       setShowRidePopup(false);
       setEmergencyData(null);
+      
+    } catch (error) {
+      console.error('[RESPONSE] Error responding to ride:', error);
+      Alert.alert('Error', 'Failed to respond to ride request. Please try again.');
+      setShowRidePopup(false);
+      setEmergencyData(null);
+      
+      // Resume polling on error if status is Online
+      if (status === 'Online') {
+        console.log('[RESPONSE] Resuming polling after error');
+        setIsPolling(true);
+        pollForRideRequests();
+        pollingIntervalRef.current = setInterval(pollForRideRequests, 5000);
+      }
     }
   };
 
