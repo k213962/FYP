@@ -130,7 +130,7 @@ async function validateAndFixEmergencyLocation(location) {
     }
 }
 
-module.exports.findNearbyDrivers = async (emergencyLocation, serviceType, emergencyType = null, maxDistance = 20, limit = 10) => {
+module.exports.findNearbyDrivers = async (emergencyLocation, serviceType, emergencyType = null, maxDistance = 50, limit = 10) => {
     // Convert service type to match captain's vehicleType
     let vehicleType = serviceType;
     if (serviceType === 'fire brigade') {
@@ -196,7 +196,32 @@ Vehicle Type Filter: ${vehicleType}
             });
         }
 
-        // Build query - always check for online status and location
+        // Try finding captains without distance constraint first
+        const allOnlineCaptains = await Captain.find({
+            status: 'Online',
+            vehicleType: vehicleType,
+            'location.coordinates': { $exists: true }
+        }).select('_id fullname phone vehicleType location');
+
+        console.log(`Found ${allOnlineCaptains.length} total online captains of type ${vehicleType}`);
+        
+        // Calculate distances for all captains
+        const captainsWithDistance = allOnlineCaptains.map(captain => {
+            const distance = calculateDistance(
+                coordinates[1],
+                coordinates[0],
+                captain.location.coordinates[1],
+                captain.location.coordinates[0]
+            ) / 1000; // Convert to km
+            return { captain, distance };
+        });
+
+        console.log('Distance to available captains:');
+        captainsWithDistance.forEach(({ captain, distance }) => {
+            console.log(`${captain.fullname?.firstname || 'Unknown'}: ${distance.toFixed(2)} km`);
+        });
+
+        // Build query with increased search radius
         const query = {
             status: 'Online',
             location: {
@@ -216,13 +241,6 @@ Vehicle Type Filter: ${vehicleType}
         }
 
         console.log('MongoDB query:', JSON.stringify(query, null, 2));
-
-        // Try a simpler location query to see if any captains are within range
-        const baseCaptainsNearby = await Captain.find(query)
-            .select('_id fullname phone vehicleType vehicleNoPlate location rating')
-            .limit(limit);
-        
-        console.log(`Captains nearby (without vehicle type filter): ${baseCaptainsNearby.length}`);
 
         // Find drivers matching the criteria
         const drivers = await Captain.find(query)
@@ -259,8 +277,14 @@ Vehicle Type Filter: ${vehicleType}
             });
         } else {
             console.log('⚠️ No drivers found for this emergency type in the specified radius');
-            if (baseCaptainsNearby.length > 0) {
-                console.log(`NOTE: Found ${baseCaptainsNearby.length} captains nearby without vehicle type filter`);
+            if (captainsWithDistance.length > 0) {
+                console.log('Available captains outside search radius:');
+                captainsWithDistance
+                    .sort((a, b) => a.distance - b.distance)
+                    .slice(0, 3)
+                    .forEach(({ captain, distance }, index) => {
+                        console.log(`${index + 1}. ${captain.fullname?.firstname || 'Unknown'} - ${distance.toFixed(2)} km away - ${captain.vehicleType}`);
+                    });
             }
         }
 

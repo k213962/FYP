@@ -16,6 +16,7 @@ export default function Layout() {
         <Stack.Screen name="Pages/UserLogout" />
         <Stack.Screen name="Pages/CaptainHome" />
         <Stack.Screen name="Pages/CaptainRiding" />
+        <Stack.Screen name="Pages/UserRideTracking" />
       </Stack>
     </UserContext>
   );

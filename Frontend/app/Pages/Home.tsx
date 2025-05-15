@@ -8,6 +8,7 @@ import LookingForDriver from "./LookingForDriver";
 import ConfirmRide from "./UserConfirmRide";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
+import { useRouter } from "expo-router";
 
 
 const { width, height } = Dimensions.get("window");
@@ -26,6 +27,9 @@ const Home = () => {
   const [isRideConfirmed, setRideConfirmed] = useState(false);
   const [rideResponse, setRideResponse] = useState<any>(null);
   const [username, setUsername] = useState<string>("");
+  const [captainDetails, setCaptainDetails] = useState<any>(null);
+  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (location) {
@@ -199,6 +203,119 @@ const Home = () => {
       );
     }
   };
+
+  // Add polling for ride status updates
+  useEffect(() => {
+    if (isSearchingForDriver && rideResponse?.ride?._id) {
+      console.log('Starting to poll for ride status updates');
+      
+      const pollRideStatus = async () => {
+        try {
+          const token = await AsyncStorage.getItem('token');
+          if (!token) {
+            console.error('No token found for polling');
+            return;
+          }
+
+          const response = await axios.get(
+            `${process.env.EXPO_PUBLIC_BASE_URL}/rides/${rideResponse.ride._id}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          console.log('Full ride response:', {
+            rideId: rideResponse.ride._id,
+            status: response.data?.ride?.status,
+            hasCaptain: !!response.data?.ride?.captain,
+            captainDetails: response.data?.ride?.captain
+          });
+
+          if (response.data?.ride) {
+            const ride = response.data.ride;
+            
+            // Check if ride has a captain assigned
+            if (ride.captain && ride.status !== 'pending') {
+              console.log('Captain assigned to ride:', {
+                captainId: ride.captain._id,
+                status: ride.status
+              });
+              
+              setSearchingForDriver(false);
+              setCaptainDetails(ride.captain);
+              
+              // Navigate to tracking screen with ride ID
+              console.log('Navigating to tracking screen...');
+              router.replace({
+                pathname: "/Pages/UserRideTracking",
+                params: { rideId: rideResponse.ride._id }
+              });
+              
+              // Clear polling interval
+              if (pollingInterval) {
+                clearInterval(pollingInterval);
+                setPollingInterval(null);
+              }
+              
+              return;
+            }
+
+            switch (ride.status) {
+              case 'pending':
+                console.log('Ride still pending, continuing to search...');
+                break;
+              case 'no_drivers':
+                console.log('No drivers available, showing alert...');
+                setSearchingForDriver(false);
+                Alert.alert(
+                  'No Drivers Available',
+                  'Sorry, no drivers are available at the moment. Please try again later.',
+                  [{ text: 'OK', onPress: () => router.back() }]
+                );
+                break;
+              case 'cancelled':
+                console.log('Ride cancelled, showing alert...');
+                setSearchingForDriver(false);
+                Alert.alert(
+                  'Ride Cancelled',
+                  'Your ride request has been cancelled.',
+                  [{ text: 'OK', onPress: () => router.back() }]
+                );
+                break;
+              default:
+                console.log('Unhandled ride status:', ride.status);
+                break;
+            }
+          }
+        } catch (error) {
+          console.error('Error polling ride status:', error);
+        }
+      };
+
+      // Poll every 3 seconds
+      const interval = setInterval(pollRideStatus, 3000);
+      setPollingInterval(interval);
+      pollRideStatus(); // Poll immediately
+
+      return () => {
+        if (interval) {
+          clearInterval(interval);
+        }
+      };
+    }
+  }, [isSearchingForDriver, rideResponse]);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, []);
 
   return (
     <View style={styles.container}>

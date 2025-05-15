@@ -79,12 +79,17 @@ exports.loginCaptain = async (email, password) => {
     }
 };
 
+/**
+ * Update captain status
+ * @param {string} captainId - Captain ID
+ * @param {string} status - New status ('Online', 'Offline', or 'Busy')
+ */
 exports.updateCaptainStatus = async (captainId, status) => {
     try {
         // Validate status
-        const validStatuses = ['available', 'busy', 'offline', 'online'];
-        if (!validStatuses.includes(status.toLowerCase())) {
-            throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+        const validStatuses = ['Online', 'Offline', 'Busy'];
+        if (!validStatuses.includes(status)) {
+            throw new Error(`Invalid status. Status should be one of: ${validStatuses.join(', ')}`);
         }
 
         // Update captain status
@@ -92,7 +97,7 @@ exports.updateCaptainStatus = async (captainId, status) => {
             captainId,
             {
                 $set: {
-                    status: status.toLowerCase(),
+                    status: status,
                     lastStatusUpdate: new Date()
                 }
             },
@@ -496,88 +501,6 @@ exports.getCaptainById = async (captainId) => {
     } catch (error) {
         console.error(`Error getting captain ${captainId}:`, error);
         return null;
-    }
-};
-
-/**
- * Update captain status
- * @param {string} captainId - Captain ID
- * @param {string} status - New status ('Online' or 'Offline')
- */
-exports.updateCaptainStatus = async (captainId, status) => {
-    try {
-        if (status !== 'Online' && status !== 'Offline') {
-            throw new Error('Invalid status. Status should be either Online or Offline');
-        }
-
-        const captain = await Captain.findByIdAndUpdate(
-            captainId,
-            { status },
-            { new: true }
-        );
-
-        if (!captain) {
-            throw new Error('Captain not found');
-        }
-
-        return captain;
-    } catch (error) {
-        console.error(`Error updating captain ${captainId} status:`, error);
-        throw error;
-    }
-};
-
-/**
- * Update captain location
- * @param {string} captainId - Captain ID
- * @param {Object} location - Location object with latitude and longitude
- */
-exports.updateCaptainLocation = async (captainId, location) => {
-    try {
-        if (!location || !location.latitude || !location.longitude) {
-            throw new Error('Invalid location data');
-        }
-
-        // Format the location as a GeoJSON Point
-        const geoJSONLocation = {
-            type: 'Point',
-            coordinates: [location.longitude, location.latitude],
-            lastUpdated: new Date()
-        };
-
-        const captain = await Captain.findByIdAndUpdate(
-            captainId,
-            { location: geoJSONLocation },
-            { new: true }
-        );
-
-        if (!captain) {
-            throw new Error('Captain not found');
-        }
-
-        return captain;
-    } catch (error) {
-        console.error(`Error updating captain ${captainId} location:`, error);
-        throw error;
-    }
-};
-
-/**
- * Get captain location
- * @param {string} captainId - Captain ID
- */
-exports.getCaptainLocation = async (captainId) => {
-    try {
-        const captain = await Captain.findById(captainId).select('location');
-        
-        if (!captain) {
-            throw new Error('Captain not found');
-        }
-
-        return captain.location;
-    } catch (error) {
-        console.error(`Error getting captain ${captainId} location:`, error);
-        throw error;
     }
 };
 

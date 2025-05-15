@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, Linking } from 'react-
 import { useRouter } from "expo-router";
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CaptainDetailsCard from './CaptainDetailsCard';
 
 const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => {
   const [rideStatus, setRideStatus] = useState(emergencyData?.status || 'pending');
@@ -10,6 +11,7 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
     name: emergencyData?.userName || 'Emergency User',
     email: emergencyData?.user?.email || null
   });
+  const [captainDetails, setCaptainDetails] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -61,6 +63,9 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
             switch (latestUpdate.type) {
               case 'ride_accepted':
                 setRideStatus('accepted');
+                if (latestUpdate.captainDetails) {
+                  setCaptainDetails(latestUpdate.captainDetails);
+                }
                 break;
               case 'ride_started':
                 setRideStatus('started');
@@ -163,17 +168,23 @@ const EmergencyPopup = ({ onClose, emergencyData, remainingTime, onAccept }) => 
         </View>
       </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.declineButton} onPress={onClose}>
-          <Text style={styles.declineText}>Ignore</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.acceptButton]} 
-          onPress={onAccept}
-        >
-          <Text style={styles.acceptText}>Accept</Text>
-        </TouchableOpacity>
-      </View>
+      {captainDetails && rideStatus === 'accepted' && (
+        <CaptainDetailsCard captainDetails={captainDetails} />
+      )}
+
+      {rideStatus === 'pending' && (
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity style={styles.declineButton} onPress={onClose}>
+            <Text style={styles.declineText}>Ignore</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.acceptButton]} 
+            onPress={onAccept}
+          >
+            <Text style={styles.acceptText}>Accept</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -257,46 +268,44 @@ const styles = StyleSheet.create({
     color: '#555',
   },
   detailSubtitle: {
-    color: '#333',
-    marginTop: 2,
     fontSize: 14,
+    color: '#666',
   },
   phoneNumber: {
     color: '#007AFF',
     textDecorationLine: 'underline',
   },
   emailText: {
-    color: '#007AFF',
+    color: '#666',
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 16,
   },
   declineButton: {
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    width: '48%',
-    alignItems: 'center',
-  },
-  declineText: {
-    color: '#333',
-    fontWeight: 'bold',
-    fontSize: 14,
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginRight: 8,
   },
   acceptButton: {
-    backgroundColor: '#2ecc71',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    width: '48%',
-    alignItems: 'center',
+    flex: 1,
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  declineText: {
+    color: '#666',
+    textAlign: 'center',
+    fontWeight: '600',
   },
   acceptText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '600',
   },
 });
 

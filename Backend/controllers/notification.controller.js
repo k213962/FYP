@@ -5,6 +5,9 @@ const captainService = require('../services/captain.service');
 // In production, this would be stored in a database
 const pendingNotifications = new Map();
 
+// Store notification acknowledgments
+const notificationAcknowledgments = new Map();
+
 const NotificationController = {
   /**
    * Poll for available ride requests
@@ -37,15 +40,17 @@ const NotificationController = {
       
       // If there are no pending notifications, check for new ride requests
       if (notifications.length === 0) {
-        // Find nearby pending rides within 5km radius
+        // Find nearby pending rides within 50km radius (matching driver search radius)
         const pendingRides = await rideService.getNearbyPendingRides(
           captainLocation.coordinates[0], // longitude
           captainLocation.coordinates[1], // latitude
-          5, // radius in km
+          50, // radius in km - increased to match driver search radius
           captain.vehicleType // vehicle type
         );
         
         if (pendingRides && pendingRides.length > 0) {
+          console.log(`[NOTIFICATION] Found ${pendingRides.length} pending rides for captain ${captainId}`);
+          
           // Map rides to notification format
           notifications = pendingRides.map(ride => ({
             type: 'ride_request',
@@ -62,21 +67,58 @@ const NotificationController = {
           
           // Store for future reference
           pendingNotifications.set(captainId, notifications);
+          
+          // Log the notifications being sent
+          console.log(`[NOTIFICATION] Sending ${notifications.length} notifications to captain ${captainId}:`, 
+            notifications.map(n => ({ rideId: n.rideId, distance: n.distanceInKm })));
+        } else {
+          console.log(`[NOTIFICATION] No pending rides found for captain ${captainId}`);
         }
+      } else {
+        console.log(`[NOTIFICATION] Using ${notifications.length} existing notifications for captain ${captainId}`);
       }
       
-      // Return the notifications and clear them from memory
+      // Return the notifications but don't clear them yet
       const response = {
         success: true,
         notifications
       };
       
-      // Clear notifications after sending them
-      pendingNotifications.set(captainId, []);
-      
       return res.status(200).json(response);
     } catch (error) {
       console.error('Error in pollAvailableRequests:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  },
+  
+  /**
+   * Acknowledge notification receipt
+   * Called by the frontend when a notification is processed
+   */
+  acknowledgeNotification: async (req, res) => {
+    try {
+      const { rideId } = req.params;
+      const captainId = req.user.id;
+      
+      // Get current notifications
+      const notifications = pendingNotifications.get(captainId) || [];
+      
+      // Remove the acknowledged notification
+      const updatedNotifications = notifications.filter(n => n.rideId !== rideId);
+      
+      // Update stored notifications
+      pendingNotifications.set(captainId, updatedNotifications);
+      
+      // Store acknowledgment
+      const acks = notificationAcknowledgments.get(captainId) || [];
+      acks.push({ rideId, timestamp: new Date() });
+      notificationAcknowledgments.set(captainId, acks);
+      
+      console.log(`[NOTIFICATION] Captain ${captainId} acknowledged notification for ride ${rideId}`);
+      
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error acknowledging notification:', error);
       return res.status(500).json({ error: 'Internal server error' });
     }
   },
@@ -89,6 +131,12 @@ const NotificationController = {
     try {
       // Get existing notifications or create new array
       const existingNotifications = pendingNotifications.get(captainId) || [];
+      
+      // Check if this ride is already in notifications
+      if (existingNotifications.some(n => n.rideId === rideData._id.toString())) {
+        console.log(`[NOTIFICATION] Ride ${rideData._id} already in notifications for captain ${captainId}`);
+        return true;
+      }
       
       // Add the new notification
       existingNotifications.push({

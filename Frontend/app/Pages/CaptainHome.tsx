@@ -55,7 +55,14 @@ interface EmergencyData {
 
 const Home = () => {
   const router = useRouter();
-  const [status, setStatus] = useState('Offline');
+  // Define valid status values
+  const VALID_STATUSES = {
+    ONLINE: 'Online',
+    OFFLINE: 'Offline',
+    BUSY: 'Busy'
+  };
+  
+  const [status, setStatus] = useState(VALID_STATUSES.OFFLINE);
   const [showRidePopup, setShowRidePopup] = useState(false);
   const [emergencyData, setEmergencyData] = useState<EmergencyData | null>(null);
   const appState = useRef(AppState.currentState);
@@ -113,7 +120,7 @@ const Home = () => {
 
   // Toggle captain status function
   const toggleStatus = async () => {
-    const newStatus = status === 'Online' ? 'Offline' : 'Online';
+    const newStatus = status === VALID_STATUSES.ONLINE ? VALID_STATUSES.OFFLINE : VALID_STATUSES.ONLINE;
     console.log(`[STATUS] User toggled status button from ${status} to ${newStatus}`);
     setStatus(newStatus);
   };
@@ -171,7 +178,7 @@ const Home = () => {
   
   // Poll for available ride requests
   const pollForRideRequests = async () => {
-    if (status !== 'Online') {
+    if (status !== VALID_STATUSES.ONLINE) {
       console.log('[POLL] Captain is offline, skipping poll');
       return;
     }
@@ -211,42 +218,101 @@ const Home = () => {
   // Handle accepting or declining a ride
   const handleRideResponse = async (response: 'accept' | 'decline') => {
     try {
+      console.log('[RESPONSE] Starting ride response process:', {
+        response,
+        rideId: emergencyData?.rideId,
+        currentStatus: status
+      });
+
       const token = await AsyncStorage.getItem('token');
+      console.log('[RESPONSE] Token retrieved:', token ? 'Yes' : 'No');
       
       if (!token || !emergencyData) {
-        console.error('[RESPONSE] No token or ride request');
+        console.error('[RESPONSE] Missing data:', {
+          hasToken: !!token,
+          hasEmergencyData: !!emergencyData,
+          emergencyData
+        });
         return;
       }
       
       if (response === 'accept') {
-        // Accept the ride and update captain status
-        const acceptResponse = await axios.post(
-          `${baseUrl}/rides/${emergencyData.rideId}/accept`,
-          {},
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
+        try {
+          console.log('[RESPONSE] Attempting to accept ride:', {
+            rideId: emergencyData.rideId,
+            endpoint: `${baseUrl}/rides/${emergencyData.rideId}/accept`
+          });
 
-        if (acceptResponse.status === 200) {
-          console.log('[RESPONSE] Ride accepted successfully');
-          // Update local status to busy
-          setStatus('Busy');
-          // Stop polling for new requests
-          setIsPolling(false);
-          if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
+          // Send accept request to backend
+          const acceptResponse = await axios.post(
+            `${baseUrl}/rides/${emergencyData.rideId}/accept`,
+            {},
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          console.log('[RESPONSE] Accept request successful:', {
+            status: acceptResponse.status,
+            data: acceptResponse.data
+          });
+
+          if (acceptResponse.status === 200) {
+            console.log('[RESPONSE] Ride accepted successfully, updating UI state');
+            
+            // Backend will mark the captain as busy, we just need to update our local state
+            setStatus(VALID_STATUSES.BUSY);
+            
+            // Stop polling for new requests
+            console.log('[RESPONSE] Stopping polling');
+            setIsPolling(false);
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+              console.log('[RESPONSE] Polling interval cleared');
+            }
+
+            // Clear the popup before navigation
+            console.log('[RESPONSE] Cleaning up UI state');
+            setShowRidePopup(false);
+            setEmergencyData(null);
+            
+            // Navigate to the riding screen
+            console.log('[RESPONSE] Navigating to riding screen:', {
+              route: `/Pages/CaptainRiding?rideId=${emergencyData.rideId}`
+            });
+            router.push(`/Pages/CaptainRiding?rideId=${emergencyData.rideId}`);
           }
-          // Navigate to the riding screen
-          router.push(`/Pages/CaptainRiding?rideId=${emergencyData.rideId}`);
+        } catch (acceptError: any) {
+          console.error('[RESPONSE] Accept request failed:', {
+            status: acceptError.response?.status,
+            data: acceptError.response?.data,
+            error: acceptError.message
+          });
+          
+          // Show error to user
+          Alert.alert('Error', acceptError.response?.data?.message || 'Failed to accept ride. Please try again.');
+          
+          // Resume polling if we're still online
+          if (status === VALID_STATUSES.ONLINE) {
+            setIsPolling(true);
+            pollForRideRequests();
+            pollingIntervalRef.current = setInterval(pollForRideRequests, 5000);
+          }
+          
+          throw acceptError;
         }
       } else {
+        console.log('[RESPONSE] Request declined, checking if polling should resume');
         // If declined, resume polling if status is still Online
-        if (status === 'Online') {
+        if (status === VALID_STATUSES.ONLINE) {
+          // Clear UI state first
+          setShowRidePopup(false);
+          setEmergencyData(null);
+          
           console.log('[RESPONSE] Resuming polling after decline');
           setIsPolling(true);
           pollForRideRequests();
@@ -254,18 +320,21 @@ const Home = () => {
         }
       }
       
-      // Clear the popup in any case
-      setShowRidePopup(false);
-      setEmergencyData(null);
-      
-    } catch (error) {
-      console.error('[RESPONSE] Error responding to ride:', error);
+    } catch (error: any) {
+      console.error('[RESPONSE] Error in handleRideResponse:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        emergencyData
+      });
       Alert.alert('Error', 'Failed to respond to ride request. Please try again.');
+      
+      // Clear UI state
       setShowRidePopup(false);
       setEmergencyData(null);
       
       // Resume polling on error if status is Online
-      if (status === 'Online') {
+      if (status === VALID_STATUSES.ONLINE) {
         console.log('[RESPONSE] Resuming polling after error');
         setIsPolling(true);
         pollForRideRequests();
@@ -299,7 +368,7 @@ const Home = () => {
 
   // Start polling when status changes to Online
   useEffect(() => {
-    if (status === 'Online') {
+    if (status === VALID_STATUSES.ONLINE) {
       console.log('[POLL] Starting ride request polling because status is Online');
       setIsPolling(true);
       
@@ -370,7 +439,7 @@ const Home = () => {
               longitudeDelta: 0.05
             });
             
-            if (status === 'Online') {
+            if (status === VALID_STATUSES.ONLINE) {
               updateLocationOnServer(latitude, longitude);
             }
           }
@@ -446,7 +515,7 @@ const Home = () => {
         <Image
           style={styles.logo}
           source={{
-            uri: 'https://upload.wikimedia.org/wikipedia/commons/c/cc/Uber_logo_2018.png',
+          //  uri: 'https://upload.wikimedia.org/wikipedia/commons/c/cc/Uber_logo_2018.png',
           }}
         />
         <TouchableOpacity

@@ -108,7 +108,7 @@ const RideController = {
 
             // First, check if the captain is already busy
             const captain = await captainService.getCaptainById(captainId);
-            if (captain.status === 'busy') {
+            if (captain.status === 'Busy') {
                 return res.status(400).json({ 
                     error: 'Captain is already on another ride',
                     message: 'Please complete your current ride before accepting a new one'
@@ -117,8 +117,8 @@ const RideController = {
 
             // Start a transaction or atomic operation
             try {
-                // 1. Update captain status to busy
-                await captainService.updateCaptainStatus(captainId, 'busy');
+                // 1. Update captain status to Busy
+                await captainService.updateCaptainStatus(captainId, 'Busy');
 
                 // 2. Update ride with captain info and status
                 const ride = await rideService.acceptRide(rideId, captainId, {
@@ -127,9 +127,9 @@ const RideController = {
                     acceptedAt: new Date()
                 });
 
-            if (!ride) {
+                if (!ride) {
                     // Rollback captain status if ride update fails
-                    await captainService.updateCaptainStatus(captainId, 'available');
+                    await captainService.updateCaptainStatus(captainId, 'Online');
                     return res.status(404).json({ 
                         error: 'Emergency request not found or already accepted' 
                     });
@@ -147,12 +147,20 @@ const RideController = {
                     type: 'ride_accepted',
                     rideId,
                     captainId,
-                    timestamp: new Date()
+                    timestamp: new Date(),
+                    captainDetails: {
+                        name: captain.fullname,
+                        phone: captain.phone,
+                        vehicleType: captain.vehicleType,
+                        vehicleNoPlate: captain.vehicleNoPlate,
+                        location: captain.location,
+                        rating: captain.rating
+                    }
                 });
 
                 // 5. Send success response with updated ride info
-            return res.status(200).json({ 
-                message: 'Emergency request accepted successfully',
+                return res.status(200).json({ 
+                    message: 'Emergency request accepted successfully',
                     ride,
                     captain: {
                         id: captain._id,
@@ -164,7 +172,7 @@ const RideController = {
 
             } catch (error) {
                 // If anything fails, try to rollback captain status
-                await captainService.updateCaptainStatus(captainId, 'available');
+                await captainService.updateCaptainStatus(captainId, 'Online');
                 throw error; // Re-throw to be caught by outer catch block
             }
 
@@ -431,6 +439,35 @@ function getRideStatusUpdatesForUser(userId) {
     const updates = rideStatusUpdates.get(userId);
     rideStatusUpdates.set(userId, []);
     return updates;
+}
+
+/**
+ * Remove persisted assignment for a ride
+ * @param {string} rideId - The ride ID
+ */
+async function removePersistedAssignment(rideId) {
+    try {
+        // Clear any timers
+        const ride = activeRides.get(rideId);
+        if (ride && ride.timer) {
+            clearTimeout(ride.timer);
+        }
+
+        // Remove from active rides
+        activeRides.delete(rideId);
+
+        // Clear notifications for all drivers that were in the queue
+        if (ride && ride.drivers) {
+            for (const driver of ride.drivers) {
+                await notificationController.clearPendingNotifications(driver._id);
+            }
+        }
+
+        console.log(`✅ Successfully removed persisted assignment for ride ${rideId}`);
+    } catch (error) {
+        console.error(`Error removing persisted assignment for ride ${rideId}:`, error);
+        // Don't throw the error as this is a cleanup function
+    }
 }
 
 // Export the controller
