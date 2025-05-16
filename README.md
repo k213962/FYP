@@ -1,8 +1,3 @@
-
-# Project Title
-
-A brief description of what this project does and who it's for
-
 # 🚨 EmergiVoice
 
 **EmergiVoice** is a real-time emergency response mobile application built using **React Native (Expo SDK 53)** for the frontend and **Node.js + MongoDB** for the backend. It provides secure authentication, live audio/video features, location tracking, mobile-first UI, and intelligent assistance powered by fine-tuned large language models (LLMs).
