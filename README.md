@@ -175,7 +175,3 @@ EmergiVoice/
   Thanks to the open-source community, Hugging Face, Meta AI, and Expo for building tools that empower developers and improve lives.
  
 ---
-``` text
-Let me know if you'd like help setting up API integration for these LLMs or generating an architecture diagram for visual explanation.
-```
-
