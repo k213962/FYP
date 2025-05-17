@@ -23,7 +23,7 @@ const API_KEY = 'your_api_key';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // AssemblyAI configuration
-const ASSEMBLYAI_API_KEY = '79e823cf932643c89007c129f422472e';
+const ASSEMBLYAI_API_KEY = 'your_api_key';
 const ASSEMBLYAI_BASE_URL = 'https://api.assemblyai.com';
 
 // System prompt for EmergiVoice
