@@ -19,7 +19,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import axios from 'axios';
 
 // API configuration
-const API_KEY = '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';
+const API_KEY = 'your_api_key';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // AssemblyAI configuration
